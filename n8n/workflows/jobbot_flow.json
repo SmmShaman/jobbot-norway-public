@@ -1,0 +1,51 @@
+{
+  "name": "JobBot Flow v1.0",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "cron",
+        "cronTime": "0 7 * * *",
+        "timezone": "Europe/Oslo"
+      },
+      "id": "5a2a295c-3c3b-4e8a-8e2c-f7c8f9a2e3b1",
+      "name": "Cron 07:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "command": "docker exec jobbot_playwright python -m src.apply {{ $json.job_id }}"
+      },
+      "id": "b8e3e3e4-2f2f-4a4a-9e9e-a1b2c3d4e5f6",
+      "name": "Execute Apply Script",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        720,
+        340
+      ]
+    }
+  ],
+  "connections": {
+    "Cron 07:00": {
+      "main": [
+        [
+          {
+            "node": "Execute Apply Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "1"
+}

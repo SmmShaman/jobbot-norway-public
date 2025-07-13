@@ -1,0 +1,151 @@
+{
+  "name": "Manual JobBot Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger-start",
+      "name": "Manual Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-1600, 260]
+    },
+    {
+      "parameters": {
+        "url": "http://jobbot_playwright:3000/api/users",
+        "options": {}
+      },
+      "id": "get-users-api",
+      "name": "Get All Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [-1400, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-success",
+      "name": "API Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1200, 260]
+    },
+    {
+      "parameters": {
+        "url": "http://jobbot_playwright:3000/api/user/vitalii/find_jobs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "find-jobs-api",
+      "name": "Find Jobs for Vitalii",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [-1000, 160]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "🎯 JobBot Result:\n\n👤 User: {{ $json.username || 'vitalii' }}\n📊 Jobs found: {{ $json.jobs_found || 0 }}\n\n{{ $json.jobs_found > 0 ? '✅ Found relevant jobs!' : '📭 No relevant jobs found' }}\n\n🕒 {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-result",
+      "name": "Telegram Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-800, 160]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "❌ API Error:\n\n{{ $json.error || 'Unknown error' }}\n\n🕒 {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-error",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-1000, 360]
+    }
+  ],
+  "connections": {
+    "Manual Start": {
+      "main": [
+        [
+          {
+            "node": "Get All Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Users": {
+      "main": [
+        [
+          {
+            "node": "API Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Success?": {
+      "main": [
+        [
+          {
+            "node": "Find Jobs for Vitalii",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Jobs for Vitalii": {
+      "main": [
+        [
+          {
+            "node": "Telegram Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,213 @@
+{
+  "name": "Enhanced JobBot Flow v2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "cron",
+        "cronTime": "0 7 * * *",
+        "timezone": "Europe/Oslo"
+      },
+      "id": "morning-cron",
+      "name": "Daily Morning Run",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1.1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "command": "docker exec jobbot_playwright python -m src.main_workflow"
+      },
+      "id": "main-workflow",
+      "name": "Run Main Workflow",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "rule": "cron", 
+        "cronTime": "0 18 * * *",
+        "timezone": "Europe/Oslo"
+      },
+      "id": "evening-cron",
+      "name": "Evening Check",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1.1,
+      "position": [100, 500]
+    },
+    {
+      "parameters": {
+        "command": "docker exec jobbot_playwright python -c \"from src.job_manager import JobManager; from src.telegram_bot import TelegramBot; jm = JobManager(); tb = TelegramBot(); stats = jm.get_stats(); tb.send_message(f'📊 Daily Report:\\nTotal Jobs: {stats.get(\\\"total_jobs\\\", 0)}\\nApplied: {stats.get(\\\"status_applied\\\", 0)}\\nPending: {stats.get(\\\"status_new\\\", 0)}')\""
+      },
+      "id": "evening-report",
+      "name": "Send Evening Report",
+      "type": "n8n-nodes-base.executeCommand", 
+      "typeVersion": 1,
+      "position": [300, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-webhook",
+        "responseMode": "responseNode"
+      },
+      "id": "telegram-webhook",
+      "name": "Telegram Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "callback-check",
+              "leftValue": "={{ $json.callback_query }}",
+              "rightValue": "",
+              "operator": {
+                "operation": "exists",
+                "type": "exists"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-callback",
+      "name": "Check for Callback",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [300, 700]
+    },
+    {
+      "parameters": {
+        "command": "docker exec jobbot_playwright python -m src.telegram_handler \"{{ $json.callback_query.data }}\" \"{{ $json.callback_query.message.chat.id }}\""
+      },
+      "id": "process-callback",
+      "name": "Process Telegram Callback",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [700, 700]
+    },
+    {
+      "parameters": {
+        "rule": "cron",
+        "cronTime": "*/30 * * * *",
+        "timezone": "Europe/Oslo"
+      },
+      "id": "process-approved",
+      "name": "Process Approved Applications",
+      "type": "n8n-nodes-base.cron", 
+      "typeVersion": 1.1,
+      "position": [100, 900]
+    },
+    {
+      "parameters": {
+        "command": "docker exec jobbot_playwright python -c \"from src.job_manager import JobManager; jm = JobManager(); jobs = jm.get_pending_jobs(); approved = [j for j in jobs if j['status'] in ['APPROVED', 'QUEUED_FOR_APPLICATION']]; print(f'Found {len(approved)} approved jobs to process')\""
+      },
+      "id": "check-approved",
+      "name": "Check Approved Jobs",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [300, 900]
+    }
+  ],
+  "connections": {
+    "Daily Morning Run": {
+      "main": [
+        [
+          {
+            "node": "Run Main Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evening Check": {
+      "main": [
+        [
+          {
+            "node": "Send Evening Report", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check for Callback",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Callback": {
+      "main": [
+        [
+          {
+            "node": "Process Telegram Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Telegram Callback": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Approved Applications": {
+      "main": [
+        [
+          {
+            "node": "Check Approved Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "enhanced-jobbot-v2"
+}

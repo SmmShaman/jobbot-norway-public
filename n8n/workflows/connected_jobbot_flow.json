@@ -1,0 +1,402 @@
+{
+  "name": "Connected JobBot Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "cron",
+        "cronTime": "0 7 * * *",
+        "timezone": "Europe/Oslo"
+      },
+      "id": "9e645e90-b21d-4921-a35f-f08b7379155d",
+      "name": "Daily 7AM Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1.1,
+      "position": [-1600, 260]
+    },
+    {
+      "parameters": {
+        "url": "http://jobbot_playwright:3000/api/users",
+        "options": {}
+      },
+      "id": "ca7936cb-2147-44a9-aa1e-9c70becc6146",
+      "name": "Get All Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [-1400, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "046a2608-5c61-4b63-bc1d-24fa6f031e09",
+      "name": "Check Users Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1200, 260]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract users with AI profiles\nconst users = $input.first().json.users;\nconst activeUsers = [];\n\nfor (const [username, status] of Object.entries(users)) {\n  if (status.has_unified_profile && status.telegram_configured) {\n    activeUsers.push({\n      username: username,\n      resume_count: status.resume_count,\n      job_count: status.job_count\n    });\n  }\n}\n\nconsole.log(`Found ${activeUsers.length} active users`);\nreturn activeUsers.map(user => ({ json: user }));"
+      },
+      "id": "1302718c-ebfe-454e-880b-fde032db5e6f",
+      "name": "Process Active Users",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1000, 160]
+    },
+    {
+      "parameters": {
+        "url": "http://jobbot_playwright:3000/api/user/{{ $json.username }}/find_jobs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "c7f6336b-c96f-4df5-82b3-0adca0d84e0b",
+      "name": "Find Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [-800, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.jobs_found }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3ada8692-3fa9-4677-8790-463de180e15f",
+      "name": "Jobs Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-600, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Categorize jobs by relevance score\nconst data = $input.first().json;\nconst jobs = data.jobs || [];\nconst username = data.username;\n\nconst autoApplyJobs = jobs.filter(job => job.relevance_score >= 85);\nconst manualApprovalJobs = jobs.filter(job => job.relevance_score >= 30 && job.relevance_score < 85);\n\nconsole.log(`${username}: ${autoApplyJobs.length} auto-apply, ${manualApprovalJobs.length} manual approval`);\n\nreturn [{\n  json: {\n    username: username,\n    total_jobs: jobs.length,\n    auto_apply_jobs: autoApplyJobs,\n    manual_approval_jobs: manualApprovalJobs,\n    auto_apply_count: autoApplyJobs.length,\n    manual_approval_count: manualApprovalJobs.length\n  }\n}];"
+      },
+      "id": "b3be88c6-6308-48dd-9143-ec8f24a3d055",
+      "name": "Categorize Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.auto_apply_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa03d94b-2bd6-42a5-b636-4b598b46fc04",
+      "name": "Auto Apply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-200, 60]
+    },
+    {
+      "parameters": {
+        "url": "http://jobbot_playwright:3000/api/user/{{ $json.username }}/workflow",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"apply_jobs\": true\n}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "dc48d9ef-9753-48b3-ace3-fd1472d75555",
+      "name": "Run Auto Apply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "🤖 JobBot Auto-Apply Report\n\n👤 User: {{ $json.username }}\n🎯 Jobs found: {{ $json.total_jobs }}\n✅ Auto-applied: {{ $json.auto_apply_count }}\n📱 Need approval: {{ $json.manual_approval_count }}\n\n🕒 {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "id": "0b1c38b2-f9d3-4cd7-b025-bbffd27a6ef7",
+      "name": "Telegram Auto-Apply Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.manual_approval_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "62f2f2bc-0ea5-4bb6-a274-ae74834818b4",
+      "name": "Manual Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-200, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create Telegram approval messages for manual jobs\nconst data = $input.first().json;\nconst manualJobs = data.manual_approval_jobs || [];\nconst username = data.username;\n\nconst messages = manualJobs.map((job, index) => {\n  return {\n    json: {\n      username: username,\n      job_index: index + 1,\n      job_title: job.title,\n      company: job.company,\n      relevance_score: job.relevance_score,\n      job_url: job.url,\n      recommendation: job.ai_analysis?.recommendation || 'REVIEW'\n    }\n  };\n});\n\nreturn messages;"
+      },
+      "id": "49ff823b-67bf-460d-af57-6aea561d339d",
+      "name": "Prepare Approval Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 160]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "📋 Job Approval Request\n\n👤 User: {{ $json.username }}\n🏢 Position: {{ $json.job_title }}\n🏪 Company: {{ $json.company }}\n📊 AI Score: {{ $json.relevance_score }}%\n🤖 Recommendation: {{ $json.recommendation }}\n\n🔗 {{ $json.job_url }}\n\nShould I apply for this job?",
+        "additionalFields": {}
+      },
+      "id": "172c208b-b778-468e-8028-d2808229cf36",
+      "name": "Telegram Approval Request",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [200, 160]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "📭 No relevant jobs found\n\n👤 User: {{ $json.username }}\n🔍 Search completed\n\n🕒 {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "id": "459bdffb-d216-48f2-b2ae-5994520e0102",
+      "name": "No Jobs Found",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-400, 260]
+    },
+    {
+      "parameters": {
+        "chatId": "374008445",
+        "text": "❌ Error in JobBot workflow\n\n{{ $json.error }}\n\n🕒 {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "id": "e3b7f763-4bc4-450f-9a06-551f9a55985b",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-1000, 360]
+    }
+  ],
+  "connections": {
+    "Daily 7AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Users": {
+      "main": [
+        [
+          {
+            "node": "Check Users Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Users Response": {
+      "main": [
+        [
+          {
+            "node": "Process Active Users",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Active Users": {
+      "main": [
+        [
+          {
+            "node": "Find Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Jobs": {
+      "main": [
+        [
+          {
+            "node": "Jobs Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jobs Found?": {
+      "main": [
+        [
+          {
+            "node": "Categorize Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Jobs Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Jobs": {
+      "main": [
+        [
+          {
+            "node": "Auto Apply?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Manual Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Apply?": {
+      "main": [
+        [
+          {
+            "node": "Run Auto Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Auto Apply": {
+      "main": [
+        [
+          {
+            "node": "Telegram Auto-Apply Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Approval?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Approval Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Approval Messages": {
+      "main": [
+        [
+          {
+            "node": "Telegram Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "connected-version-1.0"
+}
