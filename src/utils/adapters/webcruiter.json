@@ -1,0 +1,8 @@
+{
+  "name": "input[name='firstName'], input#firstName",
+  "email": "input[type='email']",
+  "phone": "input[type='tel']",
+  "cover": "textarea[name='applicationText'], textarea#applicationText",
+  "cv": "input[type='file']",
+  "send": "button[type='submit'], button:has-text('Send')"
+}

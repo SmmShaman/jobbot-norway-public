@@ -1,0 +1,31 @@
+{
+  "search_sources": {
+    "finn.no": {
+      "enabled": false,
+      "rss_urls": [],
+      "keywords": [],
+      "exclude_keywords": []
+    },
+    "arbeidsplassen.nav.no": {
+      "enabled": true,
+      "search_urls": [
+        "https://arbeidsplassen.nav.no/stillinger?county=INNLANDET&v=5&municipal=INNLANDET.%C3%98STRE+TOTEN&municipal=INNLANDET.VESTRE+TOTEN"
+      ],
+      "keywords": [],
+      "exclude_keywords": []
+    }
+  },
+  "user_profile": {
+    "full_resume": "Experienced professional seeking new opportunities. Background in customer service, administration, logistics, and basic technical skills. Open to various positions including warehouse work, retail, office administration, and entry-level technical roles. Hardworking, reliable, and eager to learn new skills. Fluent in Norwegian and English.",
+    "skills": "customer service, administration, logistics, warehouse operations, retail, office work, communication, teamwork, problem solving, computer skills",
+    "experience_years": 2,
+    "preferred_locations": ["Østre Toten", "Vestre Toten", "Innlandet"],
+    "job_types": ["fulltime", "parttime", "contract"],
+    "min_relevance_score": 10
+  },
+  "application_settings": {
+    "auto_apply_threshold": 85,
+    "require_manual_approval": true,
+    "max_applications_per_day": 5
+  }
+}

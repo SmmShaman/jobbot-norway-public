@@ -1,0 +1,5 @@
+{
+  "cover": "textarea[data-automation-id='coverLetter']",
+  "cv": "input[data-automation-id='file-upload-input-ref']",
+  "send": "button[data-automation-id='submit']"
+}

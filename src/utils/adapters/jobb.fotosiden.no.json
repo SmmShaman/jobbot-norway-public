@@ -1,0 +1,8 @@
+{
+  "name": "#your-name",
+  "email": "#your-email",
+  "phone": "#your-phone",
+  "cover": "#your-message",
+  "cv": "#cv",
+  "send": "button[type=submit]"
+}

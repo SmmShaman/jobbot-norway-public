@@ -1,0 +1,5 @@
+{
+  "cover": "textarea[id=søknadstekst]",
+  "cv": "input[type=file][id=cv-file-input]",
+  "send": "button[data-testid=send-application]"
+}
