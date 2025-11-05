@@ -4,7 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from .resume_analyzer import ResumeAnalyzer
+from resume_analyzer import ResumeAnalyzer
 
 class MultiUserJobSystem:
     def __init__(self, base_data_dir: str = "/app/data"):

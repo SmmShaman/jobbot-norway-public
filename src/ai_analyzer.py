@@ -15,9 +15,9 @@ def clean_json_response(response: str) -> str:
 def analyze_job_relevance(job_title: str, job_description: str, user_skills: str) -> dict:
     """Analyze if job is relevant for the user."""
     client = AzureOpenAI(
-        azure_endpoint=os.getenv("OPENAI_ENDPOINT"),
+        azure_endpoint="https://elvarika.openai.azure.com",
         api_key=os.getenv("OPENAI_KEY"),
-        api_version="2024-05-01-preview"
+        api_version="2024-12-01-preview"
     )
     
     prompt = f"""
@@ -72,7 +72,21 @@ def get_azure_client():
     import os
     
     return AzureOpenAI(
-        azure_endpoint=os.getenv("OPENAI_ENDPOINT"),
+        azure_endpoint="https://elvarika.openai.azure.com",
         api_key=os.getenv("OPENAI_KEY"),
-        api_version="2024-05-01-preview"
+        api_version="2024-12-01-preview"
     )
+
+# Command line interface for n8n  
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) >= 4:
+        job_title = sys.argv[1]
+        company = sys.argv[2] 
+        description = sys.argv[3]
+        location = sys.argv[4] if len(sys.argv) > 4 else ""
+        
+        user_skills = "Python, Django, JavaScript, React, Node.js, PostgreSQL, Docker, Project Management"
+        result = analyze_job_relevance(job_title, description, user_skills)
+        print(json.dumps(result))

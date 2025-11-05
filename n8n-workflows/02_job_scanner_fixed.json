@@ -1,0 +1,180 @@
+{
+  "name": "AI Relevance Analyzer - Improved",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/ai-analyzer",
+        "options": {}
+      },
+      "id": "analyzer_trigger",
+      "name": "Analyzer Trigger - Secured",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [300, 300],
+      "webhookId": "ai-analyzer"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE INDEX IF NOT EXISTS idx_jobs_processed ON jobs (is_processed, scraped_at DESC); CREATE INDEX IF NOT EXISTS idx_relevance_scores_job_user ON relevance_scores (job_id, user_name); SELECT j.*, rs.score as existing_score FROM jobs j WHERE j.is_processed = false AND NOT EXISTS (SELECT 1 FROM relevance_scores rs WHERE rs.job_id = j.id AND rs.user_name = 'Vitalii') ORDER BY j.scraped_at DESC LIMIT 50;",
+        "options": {}
+      },
+      "id": "get_unprocessed_jobs",
+      "name": "Get Unprocessed Jobs - Optimized",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "chatModel": "gpt-4o-mini",
+        "messages": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Ти експерт HR аналітик для оцінки релевантності вакансій. Аналізуй вакансії для українського розробника з досвідом Python, JavaScript, веб-розробки.\n\nРЕЗЮМЕ КОРИСТУВАЧА:\n- Досвід: Python, Django, JavaScript, React, Node.js\n- Рівень: Middle/Senior Developer\n- Мови: Українська (рідна), Норвезька (A2), Англійська (B2)\n- Локація: Осло, Норвегія\n- Готовність до роботи: Full-time, віддалено або офіс в Осло\n\nОЦІНЮЙ КОЖНУ ВАКАНСІЮ ЗА КРИТЕРІЯМИ:\n1. Відповідність технічних навичок (40%)\n2. Рівень досвіду (30%)\n3. Локація та умови (20%)\n4. Мовні вимоги (10%)\n\nВІДПОВІДАЙ JSON:\n{\n  \"score\": 85,\n  \"reasoning\": \"Високий збіг навичок Python/Django, локація Осло підходить...\",\n  \"key_matches\": [\"Python\", \"Django\", \"Oslo\"],\n  \"missing_requirements\": [\"5+ years experience\"],\n  \"recommendation\": \"apply\"\n}"
+            },
+            {
+              "role": "user",
+              "content": "Проаналізуй цю вакансію:\n\nНазва: {{ $json.title }}\nКомпанія: {{ $json.company }}\nЛокація: {{ $json.location }}\nДжерело: {{ $json.source }}\nURL: {{ $json.url }}\n\nОціни релевантність від 0 до 100 та поясни рішення."
+            }
+          ]
+        }
+      },
+      "id": "analyze_job_relevance",
+      "name": "Analyze Job Relevance - Reliable",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.2,
+      "position": [700, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "azure_openai",
+          "name": "Azure OpenAI"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  try {\n    const jobData = item.json;\n    let analysis = {};\n    \n    if (item.error) {\n      analysis = {\n        score: 25,\n        reasoning: 'AI analysis failed: ' + item.error.message,\n        key_matches: [],\n        missing_requirements: ['AI analysis error'],\n        recommendation: 'review_manually'\n      };\n    } else {\n      const aiResponse = item.json.message?.content || item.json.text || '';\n      \n      try {\n        const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n        analysis = JSON.parse(jsonMatch ? jsonMatch[0] : aiResponse);\n        analysis.score = Math.min(Math.max(analysis.score || 0, 0), 100);\n      } catch (parseError) {\n        analysis = {\n          score: 30,\n          reasoning: 'JSON parse failed: ' + parseError.message,\n          key_matches: [],\n          missing_requirements: ['JSON parsing error'],\n          recommendation: 'review_manually'\n        };\n      }\n    }\n    \n    results.push({\n      job_id: jobData.id,\n      title: jobData.title,\n      company: jobData.company,\n      url: jobData.url,\n      score: analysis.score,\n      reasoning: (analysis.reasoning || 'No reasoning').replace(/'/g, \"''\"),\n      key_matches: JSON.stringify(analysis.key_matches || []),\n      missing_requirements: JSON.stringify(analysis.missing_requirements || []),\n      recommendation: analysis.recommendation || 'review',\n      ai_analysis: JSON.stringify(analysis),\n      analyzed_at: new Date().toISOString()\n    });\n  } catch (error) {\n    results.push({\n      job_id: item.json?.id || 0,\n      score: 0,\n      reasoning: 'Error: ' + error.message,\n      recommendation: 'error'\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "process_ai_results",
+      "name": "Process AI Results - Enhanced",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO relevance_scores (job_id, user_name, score, reasoning, ai_analysis, created_at) VALUES {{ $json.map(item => `(${item.job_id}, 'Vitalii', ${item.score}, '${item.reasoning}', '${item.ai_analysis.replace(/'/g, \"''\")}', '${item.analyzed_at}')`).join(', ') }}; UPDATE jobs SET is_processed = true WHERE id IN ({{ $json.map(item => item.job_id).join(', ') }}); SELECT j.*, rs.score, rs.reasoning, rs.recommendation FROM jobs j JOIN relevance_scores rs ON j.id = rs.job_id WHERE rs.score >= 80 AND rs.user_name = 'Vitalii' AND j.id IN ({{ $json.map(item => item.job_id).join(', ') }}) ORDER BY rs.score DESC;",
+        "options": {}
+      },
+      "id": "save_analysis_results",
+      "name": "Save Analysis Results - Improved",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "🧠 AI Analysis Complete\\n\\n📊 Jobs analyzed: {{ $('Process AI Results - Enhanced').all().length }}\\n🎯 High relevance (80%+): {{ $json.length }}\\n\\n{{ $json.length > 0 ? '✅ Starting application process...' : 'ℹ️ No high-relevance jobs found' }}\\n\\n🕒 Completed: {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_notification",
+      "name": "Send Enhanced Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1300, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Analyzer Trigger - Secured": {
+      "main": [
+        [
+          {
+            "node": "Get Unprocessed Jobs - Optimized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unprocessed Jobs - Optimized": {
+      "main": [
+        [
+          {
+            "node": "Analyze Job Relevance - Reliable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Job Relevance - Reliable": {
+      "main": [
+        [
+          {
+            "node": "Process AI Results - Enhanced",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Results - Enhanced": {
+      "main": [
+        [
+          {
+            "node": "Save Analysis Results - Improved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Analysis Results - Improved": {
+      "main": [
+        [
+          {
+            "node": "Send Enhanced Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-20T12:00:00.000Z",
+  "versionId": "2"
+}

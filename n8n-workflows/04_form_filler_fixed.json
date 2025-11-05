@@ -1,0 +1,243 @@
+{
+  "name": "Smart Form Filler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/form-filler",
+        "options": {}
+      },
+      "id": "filler_trigger",
+      "name": "Form Filler Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [300, 300],
+      "webhookId": "form-filler"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT j.*, rs.score, rs.reasoning FROM jobs j JOIN relevance_scores rs ON j.id = rs.job_id WHERE rs.score >= 85 AND rs.user_name = 'Vitalii' AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.job_id = j.id AND a.user_name = 'Vitalii') ORDER BY rs.score DESC LIMIT 5;",
+        "options": {}
+      },
+      "id": "get_relevant_jobs",
+      "name": "Get Relevant Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Navigate to Application Page\nconst playwright = require('playwright');\n\nasync function processJobApplication(jobData) {\n  const browser = await playwright.chromium.launch({\n    headless: true,\n    args: ['--no-sandbox', '--disable-setuid-sandbox']\n  });\n  \n  try {\n    const page = await browser.newPage();\n    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');\n    \n    console.log(`Processing job: ${jobData.title} at ${jobData.company}`);\n    \n    // Navigate to job page\n    await page.goto(jobData.url, {\n      waitUntil: 'networkidle',\n      timeout: 30000\n    });\n    \n    // Look for application button\n    const applySelectors = [\n      'a[href*=\"søknad\"]',\n      'a[href*=\"apply\"]',\n      'a:contains(\"Gå til søknad\")',\n      'a:contains(\"Send søknad\")',\n      '.apply-button'\n    ];\n    \n    let applicationUrl = null;\n    \n    for (const selector of applySelectors) {\n      try {\n        const element = await page.$(selector);\n        if (element) {\n          applicationUrl = await element.getAttribute('href');\n          if (applicationUrl) break;\n        }\n      } catch (e) {\n        continue;\n      }\n    }\n    \n    if (!applicationUrl) {\n      await browser.close();\n      return {\n        success: false,\n        error: 'No application link found',\n        job_id: jobData.id\n      };\n    }\n    \n    // Make URL absolute\n    if (!applicationUrl.startsWith('http')) {\n      const currentUrl = new URL(page.url());\n      applicationUrl = new URL(applicationUrl, currentUrl.origin).href;\n    }\n    \n    // Navigate to application page\n    await page.goto(applicationUrl, {\n      waitUntil: 'networkidle',\n      timeout: 30000\n    });\n    \n    await page.waitForTimeout(3000);\n    \n    // Get page content for analysis\n    const pageText = await page.evaluate(() => {\n      const scripts = document.querySelectorAll('script, style');\n      scripts.forEach(el => el.remove());\n      return document.body.innerText || document.body.textContent || '';\n    });\n    \n    await browser.close();\n    \n    return {\n      success: true,\n      job_id: jobData.id,\n      application_url: applicationUrl,\n      page_text: pageText.substring(0, 5000),\n      needs_analysis: true\n    };\n    \n  } catch (error) {\n    await browser.close();\n    return {\n      success: false,\n      error: error.message,\n      job_id: jobData.id\n    };\n  }\n}\n\nconst jobData = $json;\nreturn await processJobApplication(jobData);"
+      },
+      "id": "navigate_to_application",
+      "name": "Navigate to Application",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "navigation_success",
+              "leftValue": "{{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal",
+                "rightType": "boolean"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check_navigation_success",
+      "name": "Check Navigation Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "chatModel": "gpt-4",
+        "messages": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Ти експерт з аналізу веб-сторінок для автоматизації заповнення форм роботи. Проаналізуй сторінку та визнач що потрібно робити. Відповідай JSON: {\"page_type\": \"application_form|registration|terms_agreement\", \"form_fields\": [{\"name\": \"first_name\", \"type\": \"text\", \"required\": true}], \"complexity\": \"simple|medium|complex\"}"
+            },
+            {
+              "role": "user",
+              "content": "Проаналізуй цю сторінку заявки на роботу:\n\nURL: {{ $json.application_url }}\n\nТекст сторінки:\n{{ $json.page_text }}\n\nВизнач які поля потрібно заповнити."
+            }
+          ]
+        }
+      },
+      "id": "analyze_application_page",
+      "name": "Analyze Application Page",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.2,
+      "position": [1100, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "azure_openai",
+          "name": "Azure OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "applications",
+        "columns": "job_id, user_name, application_url, status, submitted_at",
+        "values": "{{ $('Navigate to Application').first().json.job_id }}, 'Vitalii', '{{ $('Navigate to Application').first().json.application_url }}', 'analyzed', NOW()",
+        "options": {}
+      },
+      "id": "save_application_record",
+      "name": "Save Application Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1300, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "🎯 Application Analysis Complete\\n\\n📋 Job: {{ $('Get Relevant Jobs').first().json.title }}\\n🏢 Company: {{ $('Get Relevant Jobs').first().json.company }}\\n📊 Relevance: {{ $('Get Relevant Jobs').first().json.score }}%\\n\\n⚠️ Manual Review Required\\nApplication page analyzed but needs human verification.\\n\\n🕒 {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_analysis_complete",
+      "name": "Send Analysis Complete",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1500, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "❌ Application Navigation Failed\\n\\n📋 Job: {{ $('Get Relevant Jobs').first().json.title }}\\n⚠️ Error: {{ $json.error }}\\n\\n🔧 Manual intervention required\\n🕒 {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_navigation_error",
+      "name": "Send Navigation Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Form Filler Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Relevant Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Relevant Jobs": {
+      "main": [
+        [
+          {
+            "node": "Navigate to Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Navigate to Application": {
+      "main": [
+        [
+          {
+            "node": "Check Navigation Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Navigation Success": {
+      "main": [
+        [
+          {
+            "node": "Analyze Application Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Navigation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Application Page": {
+      "main": [
+        [
+          {
+            "node": "Save Application Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Application Record": {
+      "main": [
+        [
+          {
+            "node": "Send Analysis Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T22:00:00.000Z",
+  "versionId": "1"
+}

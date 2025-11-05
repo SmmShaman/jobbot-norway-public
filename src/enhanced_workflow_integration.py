@@ -44,11 +44,11 @@ class EnhancedWorkflowIntegration:
     def _init_components(self):
         """Initialize all workflow components."""
         try:
-            from .multi_site_scraper import MultiSiteScraper
-            from .ai_cover_letter_generator import AICoverLetterGenerator
-            from .enhanced_sheets_integration import EnhancedSheetsTracker
-            from .ai_analyzer import analyze_job_relevance
-            from .telegram_bot import TelegramBot
+            from multi_site_scraper import MultiSiteScraper
+            from ai_cover_letter_generator import AICoverLetterGenerator
+            from enhanced_sheets_integration import EnhancedSheetsTracker
+            from ai_analyzer import analyze_job_relevance
+            from telegram_bot import TelegramBot
             
             self.scraper = MultiSiteScraper()
             self.cover_letter_generator = AICoverLetterGenerator()

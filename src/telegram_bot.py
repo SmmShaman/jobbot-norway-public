@@ -98,3 +98,57 @@ if __name__ == "__main__":
         'source': 'finn.no'
     }
     bot.send_approval_request(test_job, 85)
+
+import threading
+import time
+import requests as req
+
+def listen_for_commands(self):
+    """Listen for Telegram commands using polling."""
+    offset = 0
+    while True:
+        try:
+            url = f"{self.base_url}/getUpdates"
+            params = {"offset": offset, "timeout": 30}
+            response = req.get(url, params=params, timeout=35)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("result"):
+                    for update in data["result"]:
+                        offset = update["update_id"] + 1
+                        
+                        # Check for /start command
+                        if "message" in update and "text" in update["message"]:
+                            text = update["message"]["text"]
+                            if text == "/start":
+                                # Call N8N webhook
+                                webhook_url = "http://localhost:5678/webhook/start-jobbot"
+                                req.post(webhook_url, json={"triggered_by": "telegram"})
+                                self.send_message("🚀 JobBot workflow запущено!")
+                                
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(5)
+
+def start_bot_listener(self):
+    """Start bot in background thread."""
+    thread = threading.Thread(target=self.listen_for_commands, daemon=True)
+    thread.start()
+    return thread
+
+# Add methods to TelegramBot class
+TelegramBot.listen_for_commands = listen_for_commands  
+TelegramBot.start_bot_listener = start_bot_listener
+
+if __name__ == "__main__":
+    bot = TelegramBot()
+    print("🤖 Telegram bot started. Listening for /start command...")
+    bot.start_bot_listener()
+    
+    # Keep main thread alive
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Bot stopped.")

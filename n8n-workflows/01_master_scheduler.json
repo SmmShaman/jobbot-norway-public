@@ -1,0 +1,424 @@
+{
+  "name": "Master Job Hunter Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule_trigger",
+      "name": "Daily Trigger 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user1",
+              "name": "user1",
+              "value": "{\n  \"name\": \"Vitalii\",\n  \"fnr\": \"{{ $env.FN_NUMBER }}\",\n  \"bankid_password\": \"{{ $env.BANKID_PWD }}\",\n  \"search_filters\": {\n    \"nav_url\": \"https://arbeidsplassen.nav.no/stillinger\",\n    \"finn_url\": \"https://www.finn.no/job/fulltime/search.html\",\n    \"keywords\": [\"developer\", \"programmer\", \"software\"]\n  }\n}",
+              "type": "object"
+            },
+            {
+              "id": "current_user",
+              "name": "current_user",
+              "value": "user1",
+              "type": "string"
+            },
+            {
+              "id": "process_start_time",
+              "name": "process_start_time",
+              "value": "{{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set_variables",
+      "name": "Set User Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Create jobs table if not exists\nCREATE TABLE IF NOT EXISTS jobs (\n    id SERIAL PRIMARY KEY,\n    title VARCHAR(500) NOT NULL,\n    company VARCHAR(200),\n    description TEXT,\n    url VARCHAR(1000) UNIQUE NOT NULL,\n    source VARCHAR(50) NOT NULL,\n    location VARCHAR(200),\n    posted_date DATE,\n    scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    is_processed BOOLEAN DEFAULT FALSE\n);\n\n-- Create relevance_scores table if not exists\nCREATE TABLE IF NOT EXISTS relevance_scores (\n    id SERIAL PRIMARY KEY,\n    job_id INTEGER REFERENCES jobs(id),\n    user_name VARCHAR(100),\n    score INTEGER CHECK (score >= 0 AND score <= 100),\n    reasoning TEXT,\n    ai_analysis JSONB,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\n-- Create applications table if not exists\nCREATE TABLE IF NOT EXISTS applications (\n    id SERIAL PRIMARY KEY,\n    job_id INTEGER REFERENCES jobs(id),\n    user_name VARCHAR(100),\n    application_url VARCHAR(1000),\n    status VARCHAR(50) DEFAULT 'pending',\n    cover_letter_path VARCHAR(500),\n    screenshot_path VARCHAR(500),\n    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n    nav_reported BOOLEAN DEFAULT FALSE\n);\n\nSELECT 'Database initialized' as result;",
+        "options": {}
+      },
+      "id": "init_database",
+      "name": "Initialize Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": "{{ $workflow.id + '_job_scanner' }}",
+        "waitForExecution": true
+      },
+      "id": "trigger_job_scanner",
+      "name": "Start Job Scanner",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_new_jobs",
+              "leftValue": "{{ $json.new_jobs_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check_new_jobs",
+      "name": "Check New Jobs Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "{{ $workflow.id + '_ai_analyzer' }}",
+        "waitForExecution": true
+      },
+      "id": "trigger_ai_analyzer",
+      "name": "Start AI Analyzer",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "{{ $workflow.id + '_form_filler' }}",
+        "waitForExecution": true
+      },
+      "id": "trigger_form_filler",
+      "name": "Start Form Filler",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "{{ $workflow.id + '_nav_reporter' }}",
+        "waitForExecution": true
+      },
+      "id": "trigger_nav_reporter",
+      "name": "Start NAV Reporter",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "🤖 Job Hunter Daily Report\\n\\n👤 User: {{ $json.user1.name }}\\n📊 New jobs found: {{ $json.new_jobs_count || 0 }}\\n📝 Applications sent: {{ $json.applications_sent || 0 }}\\n📋 NAV reports: {{ $json.nav_reports || 0 }}\\n\\n⏰ Process completed at: {{ $now.format('HH:mm DD/MM/YYYY') }}\\n\\n{{ $json.summary || 'Process completed successfully' }}"
+      },
+      "id": "send_daily_report",
+      "name": "Send Daily Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1900,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "ℹ️ No new jobs found today for {{ $json.user1.name }}\\n\\n📅 Date: {{ $now.format('DD/MM/YYYY') }}\\n⏰ Time: {{ $now.format('HH:mm') }}\\n\\nNext scan tomorrow at 10:00"
+      },
+      "id": "send_no_jobs_message",
+      "name": "Send No Jobs Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/job-hunter-manual",
+        "options": {}
+      },
+      "id": "manual_trigger",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        500
+      ],
+      "webhookId": "job-hunter-manual"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is_error",
+              "leftValue": "{{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check_errors",
+      "name": "Check for Errors",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "🚨 ERROR in Job Hunter Process\\n\\n👤 User: {{ $json.user1.name }}\\n❌ Error: {{ $json.error }}\\n🕒 Time: {{ $now.format('HH:mm DD/MM/YYYY') }}\\n\\n🔧 Please check the logs and fix the issue."
+      },
+      "id": "send_error_alert",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2100,
+        600
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger 10:00": {
+      "main": [
+        [
+          {
+            "node": "Set User Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set User Config": {
+      "main": [
+        [
+          {
+            "node": "Initialize Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Database": {
+      "main": [
+        [
+          {
+            "node": "Start Job Scanner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Job Scanner": {
+      "main": [
+        [
+          {
+            "node": "Check New Jobs Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check New Jobs Found": {
+      "main": [
+        [
+          {
+            "node": "Start AI Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No Jobs Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start AI Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Start Form Filler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Form Filler": {
+      "main": [
+        [
+          {
+            "node": "Start NAV Reporter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start NAV Reporter": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set User Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Check for Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Errors": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-19T22:00:00.000Z",
+      "updatedAt": "2025-01-19T22:00:00.000Z",
+      "id": "jobhunter",
+      "name": "jobhunter"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T22:00:00.000Z",
+  "versionId": "1"
+}

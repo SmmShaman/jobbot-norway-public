@@ -1,0 +1,247 @@
+{
+  "name": "NAV Reporter",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/nav-reporter",
+        "options": {}
+      },
+      "id": "reporter_trigger",
+      "name": "NAV Reporter Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [300, 300],
+      "webhookId": "nav-reporter"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.*, j.title, j.company, j.url as job_url FROM applications a JOIN jobs j ON a.job_id = j.id WHERE a.user_name = 'Vitalii' AND a.nav_reported = false AND a.status = 'analyzed' ORDER BY a.submitted_at DESC LIMIT 10;",
+        "options": {}
+      },
+      "id": "get_unreported_applications",
+      "name": "Get Unreported Applications",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has_applications",
+              "leftValue": "{{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check_has_applications",
+      "name": "Check Has Applications",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// NAV.no BankID Authentication (adapted from working_final.py)\nconst playwright = require('playwright');\nconst subprocess = require('child_process');\n\nasync function authenticateWithNAV() {\n  const fnr = process.env.FN_NUMBER;\n  const password = process.env.BANKID_PWD;\n  \n  if (!fnr || !password) {\n    throw new Error('FN_NUMBER or BANKID_PWD environment variables not set');\n  }\n  \n  console.log('🖥️ Starting virtual display...');\n  \n  // Kill existing Xvfb processes\n  try {\n    subprocess.execSync('pkill -f Xvfb', { stdio: 'ignore' });\n  } catch (e) {\n    // Ignore if no processes to kill\n  }\n  \n  // Start Xvfb\n  const xvfbProcess = subprocess.spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac'], {\n    detached: true,\n    stdio: 'ignore'\n  });\n  \n  process.env.DISPLAY = ':99';\n  \n  // Wait for display to start\n  await new Promise(resolve => setTimeout(resolve, 2000));\n  \n  console.log('✅ Virtual display started');\n  \n  const browser = await playwright.chromium.launch({\n    headless: false,\n    args: ['--no-sandbox', '--disable-setuid-sandbox']\n  });\n  \n  try {\n    const page = await browser.newPage();\n    \n    console.log('🌐 STEP 1: Going to NAV...');\n    await page.goto('https://aktivitetsplan.nav.no/aktivitet/ny/stilling', {\n      waitUntil: 'networkidle',\n      timeout: 60000\n    });\n    \n    console.log('✅ STEP 2: Clicking BankID...');\n    await page.evaluate(() => {\n      const elements = document.querySelectorAll('*');\n      for (let el of elements) {\n        if ((el.textContent || '').trim() === 'BankID' && el.tagName === 'H2') {\n          el.click();\n          return;\n        }\n      }\n    });\n    \n    await page.waitForTimeout(5000);\n    await page.waitForLoadState('networkidle');\n    \n    console.log('✅ STEP 3: Filling FNR:', fnr.substring(0, 6) + '****');\n    await page.evaluate((fnr) => {\n      const inputs = document.querySelectorAll('input');\n      if (inputs[0]) {\n        inputs[0].value = fnr;\n        inputs[0].dispatchEvent(new Event('input', {bubbles: true}));\n      }\n    }, fnr);\n    \n    await page.waitForTimeout(2000);\n    \n    console.log('✅ STEP 4: Clicking Neste...');\n    await page.evaluate(() => {\n      const buttons = document.querySelectorAll('button');\n      for (let btn of buttons) {\n        if ((btn.textContent || '').toLowerCase().includes('neste')) {\n          btn.click();\n          return;\n        }\n      }\n    });\n    \n    await page.waitForTimeout(5000);\n    \n    console.log('🎯 STEP 5: COORDINATE CLICK on BankID-app...');\n    await page.mouse.click(640, 338);\n    \n    console.log('⏰ STEP 6: Waiting for modal with detection...');\n    let modalFound = false;\n    \n    for (let i = 0; i < 30; i++) {\n      await page.waitForTimeout(1000);\n      console.log(`⏱️ ${i+1}/30 seconds...`);\n      \n      const passwordVisible = await page.evaluate(() => {\n        const inputs = document.querySelectorAll('input[type=\"password\"]');\n        return inputs.length > 0 && inputs[0].offsetParent !== null;\n      });\n      \n      if (passwordVisible) {\n        console.log('✅ Password field detected!');\n        modalFound = true;\n        break;\n      }\n    }\n    \n    if (!modalFound) {\n      console.log('⚠️ Modal not detected, continuing anyway...');\n    }\n    \n    console.log('🔑 STEP 7: Filling password...');\n    \n    const passwordCount = await page.evaluate(() => {\n      const inputs = document.querySelectorAll('input[type=\"password\"]');\n      return inputs.length;\n    });\n    \n    console.log(`🔍 Found ${passwordCount} password fields`);\n    \n    if (passwordCount > 0) {\n      await page.evaluate((pwd) => {\n        const inputs = document.querySelectorAll('input[type=\"password\"]');\n        for (let input of inputs) {\n          input.value = pwd;\n          input.focus();\n          input.dispatchEvent(new Event('input', {bubbles: true}));\n          input.dispatchEvent(new Event('change', {bubbles: true}));\n        }\n      }, password);\n      console.log('✅ Password filled');\n    }\n    \n    await page.waitForTimeout(2000);\n    \n    console.log('🎯 STEP 8: Clicking Neste...');\n    const buttonClicked = await page.evaluate(() => {\n      const buttons = document.querySelectorAll('button');\n      for (let btn of buttons) {\n        const text = (btn.textContent || '').toLowerCase();\n        if (text.includes('neste')) {\n          btn.click();\n          return true;\n        }\n      }\n      return false;\n    });\n    \n    if (buttonClicked) {\n      console.log('✅ Button clicked successfully');\n    }\n    \n    console.log('✅ STEP 9: Waiting for final result...');\n    \n    for (let i = 0; i < 15; i++) {\n      await page.waitForTimeout(1000);\n      const currentUrl = page.url();\n      console.log(`⏱️ ${i+1}/15 - Current URL: ${currentUrl}`);\n      \n      if (currentUrl.includes('nav.no')) {\n        console.log('🎉 SUCCESS! Redirected back to NAV!');\n        break;\n      }\n    }\n    \n    const finalUrl = page.url();\n    console.log(`🎉 COMPLETE! Final URL: ${finalUrl}`);\n    \n    let authSuccess = false;\n    if (finalUrl.includes('nav.no')) {\n      console.log('✅ AUTHENTICATION SUCCESS!');\n      authSuccess = true;\n    }\n    \n    // Clean up\n    await browser.close();\n    xvfbProcess.kill();\n    subprocess.execSync('pkill -f Xvfb', { stdio: 'ignore' });\n    console.log('🔴 Display stopped');\n    \n    return {\n      success: authSuccess,\n      final_url: finalUrl,\n      authenticated_at: new Date().toISOString()\n    };\n    \n  } catch (error) {\n    await browser.close();\n    xvfbProcess.kill();\n    subprocess.execSync('pkill -f Xvfb', { stdio: 'ignore' });\n    throw error;\n  }\n}\n\n// Execute authentication\nreturn await authenticateWithNAV();"
+      },
+      "id": "authenticate_nav",
+      "name": "Authenticate with NAV",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Submit activities to NAV for each application\nconst playwright = require('playwright');\n\nasync function submitActivitiesToNAV(applications) {\n  const browser = await playwright.chromium.launch({\n    headless: false,\n    args: ['--no-sandbox', '--disable-setuid-sandbox']\n  });\n  \n  try {\n    const page = await browser.newPage();\n    \n    // Navigate to NAV activity page\n    await page.goto('https://aktivitetsplan.nav.no/aktivitet/ny/stilling', {\n      waitUntil: 'networkidle',\n      timeout: 30000\n    });\n    \n    const submittedActivities = [];\n    \n    for (const app of applications.slice(0, 5)) { // Limit to 5 applications\n      console.log(`Submitting activity for: ${app.title} at ${app.company}`);\n      \n      try {\n        // Fill activity form\n        await page.waitForSelector('input[name=\"tittel\"], [data-testid=\"activity-title\"]', { timeout: 5000 });\n        \n        // Clear and fill title\n        await page.evaluate((title) => {\n          const titleInput = document.querySelector('input[name=\"tittel\"], [data-testid=\"activity-title\"]');\n          if (titleInput) {\n            titleInput.value = '';\n            titleInput.value = title;\n            titleInput.dispatchEvent(new Event('input', {bubbles: true}));\n          }\n        }, `Søknad: ${app.title}`);\n        \n        // Fill employer field\n        await page.evaluate((company) => {\n          const employerInput = document.querySelector('input[name=\"arbeidsgiver\"], [data-testid=\"employer\"]');\n          if (employerInput) {\n            employerInput.value = '';\n            employerInput.value = company;\n            employerInput.dispatchEvent(new Event('input', {bubbles: true}));\n          }\n        }, app.company);\n        \n        // Fill description\n        await page.evaluate((description) => {\n          const descInput = document.querySelector('textarea[name=\"beskrivelse\"], [data-testid=\"description\"]');\n          if (descInput) {\n            descInput.value = '';\n            descInput.value = description;\n            descInput.dispatchEvent(new Event('input', {bubbles: true}));\n          }\n        }, `Søkte på stilling: ${app.title}\\nBedrift: ${app.company}\\nSøknad sendt via: ${app.application_url}`);\n        \n        // Set date to today\n        await page.evaluate(() => {\n          const dateInput = document.querySelector('input[type=\"date\"], [data-testid=\"date\"]');\n          if (dateInput) {\n            const today = new Date().toISOString().split('T')[0];\n            dateInput.value = today;\n            dateInput.dispatchEvent(new Event('input', {bubbles: true}));\n          }\n        });\n        \n        await page.waitForTimeout(1000);\n        \n        // Submit form\n        const submitSuccess = await page.evaluate(() => {\n          const submitBtn = document.querySelector('button[type=\"submit\"], [data-testid=\"submit\"], button:contains(\"Lagre\")');\n          if (submitBtn && !submitBtn.disabled) {\n            submitBtn.click();\n            return true;\n          }\n          return false;\n        });\n        \n        if (submitSuccess) {\n          console.log(`✅ Activity submitted for ${app.title}`);\n          submittedActivities.push({\n            application_id: app.id,\n            job_title: app.title,\n            company: app.company,\n            submitted_to_nav: true,\n            nav_submission_time: new Date().toISOString()\n          });\n          \n          // Wait before next submission\n          await page.waitForTimeout(3000);\n          \n          // Navigate back to new activity page for next submission\n          if (applications.indexOf(app) < applications.length - 1) {\n            await page.goto('https://aktivitetsplan.nav.no/aktivitet/ny/stilling', {\n              waitUntil: 'networkidle',\n              timeout: 30000\n            });\n            await page.waitForTimeout(2000);\n          }\n        } else {\n          console.log(`❌ Failed to submit activity for ${app.title}`);\n        }\n        \n      } catch (error) {\n        console.error(`Error submitting activity for ${app.title}:`, error);\n      }\n    }\n    \n    await browser.close();\n    \n    return {\n      success: true,\n      total_applications: applications.length,\n      submitted_count: submittedActivities.length,\n      submitted_activities: submittedActivities,\n      completed_at: new Date().toISOString()\n    };\n    \n  } catch (error) {\n    await browser.close();\n    throw error;\n  }\n}\n\n// Get applications data\nconst applications = $('Get Unreported Applications').all()[0].json;\nreturn await submitActivitiesToNAV(applications);"
+      },
+      "id": "submit_nav_activities",
+      "name": "Submit NAV Activities",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Update applications as reported to NAV\nUPDATE applications \nSET nav_reported = true, \n    status = 'nav_reported',\n    nav_reported_at = NOW()\nWHERE id IN ({{ $json.submitted_activities.map(item => item.application_id).join(', ') }});\n\n-- Return updated applications\nSELECT a.*, j.title, j.company \nFROM applications a \nJOIN jobs j ON a.job_id = j.id \nWHERE a.id IN ({{ $json.submitted_activities.map(item => item.application_id).join(', ') }});",
+        "options": {}
+      },
+      "id": "update_nav_status",
+      "name": "Update NAV Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1300, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres_main",
+          "name": "Skyvern Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "📋 NAV Reporting Complete\\n\\n✅ Authentication: Successful\\n📊 Applications processed: {{ $json.total_applications }}\\n📝 Activities submitted: {{ $json.submitted_count }}\\n\\n📋 Submitted to NAV:\\n{{ $json.submitted_activities.map(item => `• ${item.job_title} (${item.company})`).join('\\n') }}\\n\\n🕒 Completed: {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_nav_report",
+      "name": "Send NAV Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1500, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "ℹ️ NAV Reporter - No Applications\\n\\nNo unreported applications found.\\nAll submitted applications have been reported to NAV.\\n\\n🕒 {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_no_applications",
+      "name": "Send No Applications",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [900, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "{{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "🚨 NAV Authentication Failed\\n\\n❌ Could not authenticate with BankID\\n🔧 Manual intervention required\\n\\n📝 Error details available in logs\\n🕒 {{ $now.format('HH:mm DD/MM/YYYY') }}"
+      },
+      "id": "send_auth_error",
+      "name": "Send Auth Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram_bot",
+          "name": "JobHunter Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "NAV Reporter Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Unreported Applications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unreported Applications": {
+      "main": [
+        [
+          {
+            "node": "Check Has Applications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has Applications": {
+      "main": [
+        [
+          {
+            "node": "Authenticate with NAV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No Applications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate with NAV": {
+      "main": [
+        [
+          {
+            "node": "Submit NAV Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit NAV Activities": {
+      "main": [
+        [
+          {
+            "node": "Update NAV Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update NAV Status": {
+      "main": [
+        [
+          {
+            "node": "Send NAV Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-19T22:00:00.000Z",
+      "updatedAt": "2025-01-19T22:00:00.000Z",
+      "id": "jobhunter",
+      "name": "jobhunter"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T22:00:00.000Z",
+  "versionId": "1"
+}

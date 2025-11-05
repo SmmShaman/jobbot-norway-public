@@ -1,25 +1,8 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-
-# Environment
 .env
-*.env
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Personal data - never commit
-data/
-screenshots/
-logs/
-*.log
+*.pyc
+__pycache__/
+data/logs/
+*.backup
+*_old.py
+test_*.py
+*_backup_*.py

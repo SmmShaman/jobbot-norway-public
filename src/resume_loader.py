@@ -3,7 +3,7 @@ import json
 
 def load_user_resume(username):
     """Завантажує резюме користувача"""
-    resumes_path = f'/app/data/users/{username}/resumes'
+    resumes_path = f'data/users/{username}/resumes'
     
     result = {
         'candidate_name': username,
