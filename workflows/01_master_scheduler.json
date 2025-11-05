@@ -1,5 +1,8 @@
 {
-  "name": "Master Job Hunter Scheduler",
+  "name": "Master Scheduler",
+  "description": "Головний scheduler для автоматизації пошуку роботи. Координує всі інші workflows.",
+  "version": "1.0",
+  "last_updated": "2025-11-05",
   "nodes": [
     {
       "parameters": {
