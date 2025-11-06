@@ -2,8 +2,11 @@
 
 [build]
   base = "web-app"
-  command = "npm install && npm run build"
+  command = "npm ci && npm run build"
   publish = "dist"
+
+[build.processing]
+  skip_processing = false
 
 # Redirects for SPA
 [[redirects]]
