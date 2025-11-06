@@ -1,0 +1,26 @@
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+supabase==2.3.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Azure OpenAI
+openai==1.8.0
+
+# Web scraping
+beautifulsoup4==4.12.2
+requests==2.31.0
+playwright==1.41.0
+
+# Skyvern (will be integrated separately)
+# skyvern==0.1.0
+
+# Database
+asyncpg==0.29.0
+
+# Utils
+python-dotenv==1.0.0
+httpx==0.26.0
