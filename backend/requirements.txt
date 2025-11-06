@@ -23,4 +23,4 @@ asyncpg==0.29.0
 
 # Utils
 python-dotenv==1.0.0
-httpx==0.26.0
+httpx==0.24.1
