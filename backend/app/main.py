@@ -5,6 +5,7 @@ Main application entry point
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import jobs, applications, monitoring
+from app.routers import settings as settings_router
 from app.config import settings
 
 app = FastAPI(
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(jobs.router, prefix="/api", tags=["jobs"])
 app.include_router(applications.router, prefix="/api", tags=["applications"])
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
+app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/")
