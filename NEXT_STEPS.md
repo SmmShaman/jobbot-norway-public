@@ -139,7 +139,34 @@ WITH CHECK (
 
 ---
 
-### Крок 4: Протестуй локально (10 хвилин)
+### Крок 4: Задеплой Backend на Railway (15 хвилин)
+
+**Дія:**
+
+**Детальна інструкція:** Читай `RAILWAY_DEPLOYMENT.md`
+
+**Швидко:**
+
+1. Йди на: https://railway.app
+2. Зареєструйся через GitHub
+3. "New Project" → "Deploy from GitHub repo"
+4. Вибери: `SmmShaman/jobbot-norway-public`
+5. Branch: `claude/netlify-ui-011CUqJXNw4wkoYPis8TAkxF`
+6. Root Directory: `backend`
+7. Додай Environment Variables (всі з `backend/.env`)
+8. Deploy!
+
+**Після deployment:**
+- Скопіюй Railway URL (наприклад: https://jobbot-norway.up.railway.app)
+- Йди в Netlify → Environment Variables
+- Оновити `VITE_API_URL=https://твій-railway-url.railway.app`
+- Redeploy Netlify
+
+✅ Тепер frontend та backend підключені!
+
+---
+
+### Крок 5: Протестуй локально (10 хвилин)
 
 **Frontend:**
 ```bash
@@ -213,6 +240,11 @@ docker run -p 8001:8000 skyvern/skyvern:latest
 - [ ] Локальний backend запускається
 - [ ] Тест реєстрації працює
 - [ ] Dashboard відображається
+- [x] Settings page створена та задеплоєна
+- [x] Backend API повністю імплементований
+- [ ] Backend задеплоєний на Railway
+- [ ] Frontend підключений до backend API
+- [ ] "Scan Jobs Now" працює end-to-end
 
 **Коли всі чекбокси ✅ - СИСТЕМА ГОТОВА!**
 
