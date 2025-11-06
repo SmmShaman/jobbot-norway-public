@@ -67,7 +67,7 @@ export default function Jobs() {
                     <div className="mt-4">
                       <p className="text-sm font-medium text-gray-700">Why this matches:</p>
                       <ul className="mt-2 space-y-1">
-                        {job.match_reasons.map((reason, idx) => (
+                        {job.match_reasons.map((reason: string, idx: number) => (
                           <li key={idx} className="text-sm text-gray-600">• {reason}</li>
                         ))}
                       </ul>
