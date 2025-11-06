@@ -3,7 +3,7 @@
 ## 🎯 Що маємо зараз
 
 ✅ **Frontend** - задеплоєний на Netlify (працює!)
-✅ **Backend** - код готовий, треба задеплоїти на Railway
+✅ **Backend** - код готовий, треба задеплоїти на Render
 ✅ **Database** - Supabase налаштований
 ✅ **Документація** - повна, детальна
 
@@ -11,48 +11,38 @@
 
 ## 🚀 ЩО ТОБІ ТРЕБА ЗРОБИТИ ЗАРАЗ
 
-### Крок 1: Встановити Railway CLI (30 секунд)
+### Крок 1: Створи Render Account (30 секунд)
 
-**Виберіть один варіант:**
+1. Йди на: **https://dashboard.render.com**
+2. Sign up через GitHub (рекомендую)
+3. Підтверди email
 
-```bash
-# macOS
-brew install railway
-
-# Linux/WSL (якщо є Node.js)
-npm i -g @railway/cli
-
-# Універсальний спосіб (bash)
-bash <(curl -fsSL cli.new)
-```
-
-**Перевір:**
-```bash
-railway --version
-# Має показати щось типу: railway version 3.x.x
-```
+✅ **Готово! Кредитка НЕ потрібна - Render має безкоштовний tier!**
 
 ---
 
-### Крок 2: Задеплоїти Backend (3 хвилини)
+### Крок 2: Запусти deployment helper (3 хвилини)
 
 ```bash
 cd backend
-./deploy_railway.sh
+./deploy_render.sh
 ```
 
-**Скрипт сам зробить:**
-1. Запитає тебе авторизуватися (відкриє браузер)
-2. Створить Railway project
-3. Прив'яже до GitHub
-4. Завантажить всі змінні з `.env`
-5. Задеплоїть backend
-6. Покаже твій URL
+**Скрипт проведе тебе через:**
+1. ✅ Показ environment variables з `.env`
+2. ✅ Інструкції для створення Web Service
+3. ✅ Додавання всіх змінних в Render
+4. ✅ Deployment процес
+5. ✅ Health check тестування
+6. ✅ Інструкції для Netlify update
 
-**⚠️ ВАЖЛИВО:** Скопіюй URL з виводу! Виглядає так:
+**⚠️ ВАЖЛИВО:** Скопіюй URL після deployment! Виглядає так:
 ```
-https://jobbot-production-abc123.up.railway.app
+https://jobbot-backend.onrender.com
 ```
+
+**АБО зроби все через Dashboard вручну:**
+- Детальна інструкція: `RENDER_DEPLOYMENT.md`
 
 ---
 
@@ -63,7 +53,7 @@ https://jobbot-production-abc123.up.railway.app
 1. Йди: https://app.netlify.com
 2. Твій сайт → **Site settings** → **Environment variables**
 3. Знайди `VITE_API_URL` → **Edit**
-4. Вставити Railway URL
+4. Вставити Render URL
 5. **Save**
 6. **Deploys** → **Trigger deploy**
 
@@ -71,7 +61,7 @@ https://jobbot-production-abc123.up.railway.app
 
 ```bash
 netlify login  # Якщо ще не логінився
-netlify env:set VITE_API_URL https://твій-railway-url.railway.app
+netlify env:set VITE_API_URL https://твій-render-url.onrender.com
 netlify deploy --prod
 ```
 
@@ -82,7 +72,7 @@ netlify deploy --prod
 ### 1. Backend Health Check
 
 ```bash
-curl https://твій-railway-url.railway.app/health
+curl https://твій-render-url.onrender.com/health
 ```
 
 **Має показати:**
@@ -90,11 +80,13 @@ curl https://твій-railway-url.railway.app/health
 {"status": "healthy"}
 ```
 
+**⚠️ Примітка:** Якщо service спить (free tier), перший запит займе 30-60 секунд (cold start).
+
 ### 2. Backend API Docs
 
 Відкрий в браузері:
 ```
-https://твій-railway-url.railway.app/docs
+https://твій-render-url.onrender.com/docs
 ```
 
 Має з'явитися інтерактивна документація FastAPI!
@@ -104,7 +96,8 @@ https://твій-railway-url.railway.app/docs
 1. Йди на свій Netlify сайт (https://твій-сайт.netlify.app)
 2. Login: `test@jobbot.no` / `Test123456`
 3. **Dashboard** → Натисни **"Scan Jobs Now"**
-4. Якщо працює → **ВСЕ ГОТОВО!** 🎉
+4. Чекай 30-60 секунд якщо service спав (cold start)
+5. Якщо працює → **ВСЕ ГОТОВО!** 🎉
 
 ---
 
@@ -112,42 +105,58 @@ https://твій-railway-url.railway.app/docs
 
 ### Швидкі посилання:
 
+- 🎨 **Render deployment guide** → `RENDER_DEPLOYMENT.md`
 - 🚀 **Швидкий старт** → `DEPLOY_NOW.md`
 - 📖 **Детальна інструкція** → `ONE_COMMAND_SETUP.md`
-- 🏗️ **Архітектура** → `ARCHITECTURE.md`
 - 🧪 **Тестування API** → `backend/API_TESTING.md`
-- 🚂 **Railway deployment** → `RAILWAY_DEPLOYMENT.md`
 
 ### Типові проблеми:
 
-**Railway build fails:**
-```bash
-railway logs  # Дивись логи
-```
+**Render build fails:**
+- Дивись: Dashboard → Logs → Build tab
+- Перевір `requirements.txt`
 
 **Frontend не може з'єднатися з backend:**
 - Перевір що `VITE_API_URL` правильний в Netlify
-- Перевір CORS в Railway:
+- Перевір CORS в Render env vars:
   ```bash
-  railway variables --set CORS_ORIGINS="https://твій-netlify-сайт.netlify.app"
-  railway restart
+  CORS_ORIGINS=https://твій-netlify-сайт.netlify.app
   ```
+- Redeploy: Render Dashboard → Manual Deploy
 
 **"No search URLs configured":**
 - Йди в Settings → Search URLs tab
 - Додай хоча б один NAV URL
 - Збережи
 
+**Cold start slow (30-60 секунд):**
+- Це нормально для free tier
+- Service засипає після 15 хв неактивності
+- Опції:
+  1. Прийняти (безкоштовно)
+  2. Setup ping кожні 10 хв (cron-job.org)
+  3. Upgrade до Starter ($7/month - no sleep)
+
 ---
 
 ## 💰 Вартість
 
 - **Netlify**: $0 (безкоштовно)
-- **Railway**: $5-10/month
+- **Render**: $0 (free tier - 750 годин/місяць)
 - **Supabase**: $0 (free tier)
 - **Azure OpenAI**: ~$1-5/month (pay-per-use)
 
-**Разом: ~$6-15/month**
+**Разом: $1-5/month!** 🎉
+
+**Render Free Tier:**
+- ✅ 750 hours/month (достатньо для 24/7)
+- ✅ 512 MB RAM
+- ✅ Auto-deploy з GitHub
+- ⚠️ Засипає після 15 хв (перший запит 30-60 сек)
+
+**Upgrade до Starter ($7/month):**
+- ✅ No sleep - працює 24/7
+- ✅ Швидші response times
 
 ---
 
@@ -163,16 +172,17 @@ railway logs  # Дивись логи
 
 ## 🆘 Потрібна негайна допомога?
 
-**Railway проблеми:**
-- Docs: https://docs.railway.app
-- Discord: https://discord.gg/railway
+**Render проблеми:**
+- Docs: https://render.com/docs
+- Community: https://community.render.com
+- Status: https://status.render.com
 
 **Netlify проблеми:**
 - Docs: https://docs.netlify.com
 - Support: https://answers.netlify.com
 
 **Дивись також:**
-- `ONE_COMMAND_SETUP.md` - повна troubleshooting секція
+- `RENDER_DEPLOYMENT.md` - повна troubleshooting секція
 - `backend/API_TESTING.md` - як тестувати endpoints
 
 ---
@@ -180,20 +190,20 @@ railway logs  # Дивись логи
 ## ⚡ TL;DR (Дуже швидка інструкція)
 
 ```bash
-# 1. Встанови Railway CLI
-brew install railway  # або npm i -g @railway/cli
+# 1. Створи account
+# https://dashboard.render.com → Sign up з GitHub
 
-# 2. Deploy backend
+# 2. Deploy backend (слідуй helper script)
 cd backend
-./deploy_railway.sh
-# Скопіюй URL з виводу!
+./deploy_render.sh
+# Скопіюй URL з результату!
 
 # 3. Оновити Netlify
-netlify env:set VITE_API_URL https://твій-railway-url
+netlify env:set VITE_API_URL https://твій-render-url.onrender.com
 netlify deploy --prod
 
-# 4. Тест
-curl https://твій-railway-url/health
+# 4. Тест (чекай 30-60 сек якщо cold start)
+curl https://твій-render-url.onrender.com/health
 # Відкрий Netlify сайт → Login → Scan Jobs Now
 
 # ✅ Готово!
@@ -202,3 +212,5 @@ curl https://твій-railway-url/health
 ---
 
 **Все підготовлено! Просто виконай 3 кроки вище і система запрацює!** 🚀
+
+**Render - безкоштовний, простий, швидкий!** 🎨

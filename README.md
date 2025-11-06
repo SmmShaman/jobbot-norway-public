@@ -12,7 +12,7 @@
 
 ```bash
 cd backend
-./deploy_railway.sh
+./deploy_render.sh
 ```
 
 **Альтернатива:** Детальна інструкція → `ONE_COMMAND_SETUP.md`
@@ -52,7 +52,7 @@ cd backend
 - Azure OpenAI GPT-4
 - Supabase (PostgreSQL + Storage)
 - BeautifulSoup4 (Scraping)
-- Deploy: **Railway**
+- Deploy: **Render** (Free tier!)
 
 **Database:**
 - Supabase PostgreSQL
@@ -62,7 +62,7 @@ cd backend
 ### System Flow
 
 ```
-User → Netlify Frontend → Railway Backend → Supabase Database
+User → Netlify Frontend → Render Backend → Supabase Database
                               ↓
                          Azure OpenAI GPT-4
                               ↓
@@ -91,8 +91,8 @@ jobbot-norway-public/
 │   │       ├── ai_service.py       # Azure OpenAI
 │   │       ├── scraper_service.py  # Job scraping
 │   │       └── database.py         # Supabase ops
-│   ├── railway.toml      # Railway config
-│   └── deploy_railway.sh # Auto-deployment script
+│   ├── render.yaml       # Render config
+│   └── deploy_render.sh  # Auto-deployment script
 │
 ├── src/                  # Legacy Python modules (N8N workflows)
 │   ├── ai_analyzer.py
@@ -112,19 +112,19 @@ jobbot-norway-public/
 ### Option 1: Automated (Recommended)
 
 ```bash
-# 1. Backend to Railway
+# 1. Backend to Render
 cd backend
-./deploy_railway.sh
+./deploy_render.sh
 
 # 2. Update Netlify
-netlify env:set VITE_API_URL https://твій-railway-url.railway.app
+netlify env:set VITE_API_URL https://твій-render-url.onrender.com
 netlify deploy --prod
 ```
 
 ### Option 2: Manual GUI
 
 **Детальні інструкції:**
-- Backend → Railway: `RAILWAY_DEPLOYMENT.md`
+- Backend → Render: `RENDER_DEPLOYMENT.md`
 - Frontend → Netlify: `NETLIFY_SETUP.md`
 - Database → Supabase: `NEXT_STEPS.md`
 
@@ -147,7 +147,7 @@ netlify deploy --prod
 ### Backend Docs
 - 📘 **backend/README.md** - Full backend documentation
 - 🧪 **backend/API_TESTING.md** - API testing guide
-- 🚂 **RAILWAY_DEPLOYMENT.md** - Railway deployment
+- 🎨 **RENDER_DEPLOYMENT.md** - Render deployment
 
 ### Frontend Docs
 - 📗 **README_WEB.md** - Frontend documentation
@@ -190,7 +190,7 @@ cd backend
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_API_URL=https://your-railway-url.railway.app
+VITE_API_URL=https://your-render-url.onrender.com
 ```
 
 ### Backend (`backend/.env`)
@@ -203,7 +203,7 @@ AZURE_OPENAI_KEY=your-key
 AZURE_OPENAI_DEPLOYMENT=your-deployment
 ```
 
-**Full list:** See `RAILWAY_DEPLOYMENT.md`
+**Full list:** See `RENDER_DEPLOYMENT.md`
 
 ---
 
@@ -278,11 +278,11 @@ AZURE_OPENAI_DEPLOYMENT=your-deployment
 ## 💰 Cost Estimate
 
 - **Netlify**: Free tier (достатньо)
-- **Railway**: $5-10/month
+- **Render**: Free tier (750 hours/month) або $7/month (no sleep)
 - **Supabase**: Free tier (500MB database)
 - **Azure OpenAI**: Pay-per-use (~$1-5/month)
 
-**Total: ~$6-15/month**
+**Total: $1-5/month (free tiers)** або **$8-12/month (paid backend)**
 
 ---
 
@@ -292,13 +292,13 @@ AZURE_OPENAI_DEPLOYMENT=your-deployment
 
 **Backend не відповідає:**
 ```bash
-railway logs
-railway restart
+# Перевір логи в Render Dashboard → Logs
+# Або Manual Deploy → Deploy latest commit
 ```
 
 **Frontend не може з'єднатися:**
 - Перевір `VITE_API_URL` в Netlify env vars
-- Перевір CORS в Railway variables
+- Перевір CORS в Render env vars
 
 **AI analysis fails:**
 - Verify Azure OpenAI credentials
@@ -326,7 +326,7 @@ Built with:
 - React + Vite
 - Supabase
 - Azure OpenAI
-- Railway
+- Render (Free tier!)
 - Netlify
 
 **Developed by Claude AI** 🤖 in collaboration with human guidance.
@@ -348,7 +348,7 @@ cd jobbot-norway-public
 
 # Deploy backend (5 min)
 cd backend
-./deploy_railway.sh
+./deploy_render.sh
 
 # Update frontend (2 min)
 # Follow instructions in terminal
