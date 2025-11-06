@@ -15,3 +15,4 @@ data/logs/
 *_old.py
 test_*.py
 *_backup_*.py
+RENDER_ENV_VARS.txt
