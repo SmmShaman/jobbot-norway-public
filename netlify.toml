@@ -1,0 +1,36 @@
+# Netlify configuration for frontend deployment
+
+[build]
+  base = "web-app"
+  command = "npm install && npm run build"
+  publish = "dist"
+
+# Redirects for SPA
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Build environment
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_VERSION = "9"
+
+# Context-specific builds
+[context.production]
+  command = "npm install && npm run build"
+
+[context.deploy-preview]
+  command = "npm install && npm run build"
+
+[context.branch-deploy]
+  command = "npm install && npm run build"
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-XSS-Protection = "1; mode=block"
