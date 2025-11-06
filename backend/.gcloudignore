@@ -1,0 +1,27 @@
+# Ignore files for Google Cloud Build
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+.env
+.env.local
+*.log
+.DS_Store
+venv/
+env/
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

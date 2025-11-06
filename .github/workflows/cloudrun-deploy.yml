@@ -1,0 +1,93 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/cloudrun-deploy.yml'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: jobbot-backend
+  REGION: europe-west1  # Belgium - closest to Norway
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Build Docker image
+        working-directory: ./backend
+        run: |
+          docker build -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          docker tag gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+                     gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Push Docker image to GCR
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --min-instances 1 \
+            --max-instances 10 \
+            --memory 1Gi \
+            --cpu 1 \
+            --timeout 300 \
+            --set-env-vars "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+            --set-env-vars "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            --set-env-vars "SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}" \
+            --set-env-vars "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+            --set-env-vars "AZURE_OPENAI_KEY=${{ secrets.AZURE_OPENAI_KEY }}" \
+            --set-env-vars "AZURE_OPENAI_DEPLOYMENT=${{ secrets.AZURE_OPENAI_DEPLOYMENT }}" \
+            --set-env-vars "AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }}" \
+            --set-env-vars "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" \
+            --set-env-vars "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+            --set-env-vars "DEBUG=false" \
+            --set-env-vars "CORS_ORIGINS=http://localhost:3000,http://localhost:5173,https://jobbotnetlify.netlify.app" \
+            --set-env-vars "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            --set-env-vars "SPACY_API_KEY=${{ secrets.SPACY_API_KEY }}" \
+            --set-env-vars "SKYVERN_API_URL=${{ secrets.SKYVERN_API_URL }}"
+
+      - name: Get Cloud Run URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "🚀 Deployed to: $URL"
+
+      - name: Test deployment
+        run: |
+          sleep 10
+          curl -f ${{ steps.url.outputs.url }}/health || exit 1
+          echo "✅ Health check passed!"

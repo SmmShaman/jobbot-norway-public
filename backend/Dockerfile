@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Dockerfile for Google Cloud Run
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -8,18 +9,21 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements first (for better Docker layer caching)
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
+# Install Playwright browsers (needed for web scraping)
 RUN playwright install --with-deps chromium
 
-# Copy application
+# Copy application code
 COPY ./app ./app
 
-# Expose port
-EXPOSE 8000
+# Cloud Run injects PORT env variable, default to 8080
+ENV PORT=8080
+EXPOSE 8080
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application with dynamic port from Cloud Run
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
