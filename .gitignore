@@ -20,3 +20,4 @@ RENDER_ENV_VARS.txt
 # Google Cloud SDK (local installation)
 google-cloud-sdk/
 google-cloud-cli-linux-x86_64.tar.gz
+gcp-key.json
