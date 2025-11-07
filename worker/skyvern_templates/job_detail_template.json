@@ -1,0 +1,54 @@
+{
+  "name": "Job Detail Page Scraper",
+  "description": "Extract complete job information from a single job posting page (FINN.no or NAV.no)",
+  "url": "PLACEHOLDER_URL",
+  "webhook_callback_url": null,
+  "navigation_goal": "Navigate to the job posting page and wait for all content to load, including contact information and full job description.",
+  "data_extraction_goal": "Extract ALL available information from the job posting:\n\nESSENTIAL INFORMATION:\n1. Job title (exact full title)\n2. Company name\n3. Location (full address if available, otherwise city/region)\n4. Full job description (complete text, not truncated)\n5. Requirements (all listed qualifications and skills)\n6. Responsibilities (what the job involves)\n\nCONTACT INFORMATION:\n7. Contact person name\n8. Contact email\n9. Contact phone number\n10. Company website\n\nJOB DETAILS:\n11. Application deadline\n12. Employment type (permanent, temporary, contract)\n13. Work extent (full-time, part-time, percentage)\n14. Salary range (if mentioned)\n15. Start date\n16. Industry/sector\n17. Required experience level\n18. Required education\n\nBENEFITS & PERKS:\n19. Benefits mentioned (insurance, pension, etc)\n20. Work arrangements (remote, hybrid, office)\n\nReturn as JSON object with all fields. Use null for fields not found on the page.",
+  "navigation_payload": {
+    "wait_for_network_idle": true,
+    "timeout": 45000,
+    "wait_for_selector": "body",
+    "scroll_to_bottom": true
+  },
+  "extracted_information_schema": {
+    "type": "object",
+    "properties": {
+      "title": {"type": "string"},
+      "company": {"type": "string"},
+      "location": {"type": "string"},
+      "description": {"type": "string"},
+      "requirements": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "responsibilities": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "contact_name": {"type": "string"},
+      "contact_email": {"type": "string"},
+      "contact_phone": {"type": "string"},
+      "company_website": {"type": "string"},
+      "deadline": {"type": "string"},
+      "employment_type": {"type": "string"},
+      "extent": {"type": "string"},
+      "salary_range": {"type": "string"},
+      "start_date": {"type": "string"},
+      "industry": {"type": "string"},
+      "experience_level": {"type": "string"},
+      "education_required": {"type": "string"},
+      "benefits": {
+        "type": "array",
+        "items": {"type": "string"}
+      },
+      "work_arrangement": {"type": "string"}
+    },
+    "required": ["title", "company", "description"]
+  },
+  "error_code_mapping": {
+    "PAGE_NOT_FOUND": "Job posting page not found (404)",
+    "CONTENT_LOAD_FAILED": "Failed to load page content",
+    "EXTRACTION_INCOMPLETE": "Some job details could not be extracted"
+  }
+}

@@ -130,7 +130,7 @@ class DatabaseService:
         return result.data[0] if result.data else {}
 
     async def log_monitoring_event(self, user_id: str, event_type: str, details: Dict[str, Any]) -> None:
-        """Log monitoring event"""
+        """Log monitoring event (deprecated - use create_monitoring_log)"""
         log_entry = {
             "user_id": user_id,
             "event_type": event_type,
@@ -138,3 +138,30 @@ class DatabaseService:
             "timestamp": datetime.utcnow().isoformat()
         }
         self.client.table("monitoring_logs").insert(log_entry).execute()
+
+    async def create_monitoring_log(self, user_id: str, scan_type: str, status: str, jobs_found: int = 0, jobs_relevant: int = 0) -> Dict[str, Any]:
+        """Create monitoring log entry"""
+        log_data = {
+            "user_id": user_id,
+            "scan_type": scan_type,
+            "status": status,
+            "jobs_found": jobs_found,
+            "jobs_relevant": jobs_relevant,
+            "started_at": datetime.utcnow().isoformat()
+        }
+        result = self.client.table("monitoring_logs").insert(log_data).execute()
+        return result.data[0] if result.data else {}
+
+    async def create_scan_task(self, user_id: str, url: str, source: str, scan_type: str = "MANUAL") -> Dict[str, Any]:
+        """Create a scan task in queue for Worker to process"""
+        task_data = {
+            "user_id": user_id,
+            "url": url,
+            "source": source,
+            "scan_type": scan_type,
+            "status": "PENDING",
+            "retry_count": 0,
+            "max_retries": 3
+        }
+        result = self.client.table("scan_tasks").insert(task_data).execute()
+        return result.data[0] if result.data else {}

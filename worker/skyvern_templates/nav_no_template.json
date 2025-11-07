@@ -1,0 +1,65 @@
+{
+  "name": "NAV.no Job Listing Scraper",
+  "description": "Extract job listings from arbeidsplassen.nav.no search results",
+  "url": "PLACEHOLDER_URL",
+  "webhook_callback_url": null,
+  "navigation_goal": "Navigate through the NAV job search results page and extract all visible job postings. Handle pagination by clicking 'Neste' (Next) button if available to get more results.",
+  "data_extraction_goal": "Extract the following information from each job listing:\n1. Job title (stillingstittel)\n2. Company/Employer name (arbeidsgiver)\n3. Location (arbeidssted)\n4. Job posting URL (full link to job details)\n5. Short description/summary\n6. Application deadline (søknadsfrist) if visible\n7. Employment type (stillingstype: fast, vikariat, etc)\n8. Extent (omfang: heltid, deltid)\n\nReturn results as a JSON array with objects containing: {title, company, location, url, description, deadline, employment_type, extent}",
+  "navigation_payload": {
+    "wait_for_network_idle": true,
+    "timeout": 30000,
+    "handle_pagination": true,
+    "max_pages": 3
+  },
+  "extracted_information_schema": {
+    "type": "object",
+    "properties": {
+      "jobs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Job title (stillingstittel)"
+            },
+            "company": {
+              "type": "string",
+              "description": "Employer name (arbeidsgiver)"
+            },
+            "location": {
+              "type": "string",
+              "description": "Job location (arbeidssted)"
+            },
+            "url": {
+              "type": "string",
+              "description": "Full URL to job posting on NAV"
+            },
+            "description": {
+              "type": "string",
+              "description": "Short job description"
+            },
+            "deadline": {
+              "type": "string",
+              "description": "Application deadline (søknadsfrist)"
+            },
+            "employment_type": {
+              "type": "string",
+              "description": "Type of employment (fast, vikariat, etc)"
+            },
+            "extent": {
+              "type": "string",
+              "description": "Full-time or part-time (heltid/deltid)"
+            }
+          },
+          "required": ["title", "company", "url"]
+        }
+      }
+    }
+  },
+  "error_code_mapping": {
+    "NO_JOBS_FOUND": "Ingen stillinger funnet",
+    "PAGINATION_FAILED": "Failed to navigate to next page",
+    "EXTRACTION_FAILED": "Failed to extract job data from NAV page"
+  }
+}

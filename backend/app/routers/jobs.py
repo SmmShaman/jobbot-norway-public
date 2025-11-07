@@ -14,7 +14,14 @@ ai_service = AIService()
 
 class ScanJobsRequest(BaseModel):
     user_id: str
-    scan_type: str  # MANUAL or SCHEDULED
+    scan_type: str = "MANUAL"  # MANUAL, SCHEDULED, or QUICK
+
+
+class CreateScanTaskRequest(BaseModel):
+    user_id: str
+    url: str
+    source: str  # FINN or NAV
+    scan_type: str = "MANUAL"
 
 
 class AnalyzeJobRequest(BaseModel):
@@ -36,12 +43,11 @@ class JobsFilterRequest(BaseModel):
 async def scan_jobs(request: ScanJobsRequest, background_tasks: BackgroundTasks):
     """
     Trigger job scanning for user.
-    This will scan all configured search URLs and analyze new jobs with AI.
+    Creates scan tasks in queue for Worker to process.
     """
     try:
-        # Get user settings and profile
+        # Get user settings
         settings = await db_service.get_settings(request.user_id)
-        profile = await db_service.get_profile(request.user_id)
 
         if not settings:
             raise HTTPException(status_code=404, detail="User settings not found")
@@ -55,44 +61,44 @@ async def scan_jobs(request: ScanJobsRequest, background_tasks: BackgroundTasks)
                 detail="No search URLs configured. Please add NAV or FINN search URLs in Settings."
             )
 
-        # Get minimum relevance threshold
-        min_relevance = settings.get('min_relevance_score', 70)
+        # Create scan tasks for each URL
+        created_tasks = []
 
-        # Build user profile for AI analysis
-        user_profile = {
-            'full_name': profile.get('full_name', ''),
-            'email': profile.get('email', ''),
-            'phone': profile.get('phone', ''),
-            'skills': settings.get('unified_profile', {}).get('skills', ''),
-            'experience': settings.get('unified_profile', {}).get('experience', ''),
-            'preferred_locations': settings.get('unified_profile', {}).get('preferred_locations', []),
-        }
+        # Create tasks for NAV URLs
+        for url in nav_urls:
+            task = await db_service.create_scan_task(
+                user_id=request.user_id,
+                url=url,
+                source='NAV',
+                scan_type=request.scan_type
+            )
+            created_tasks.append(task)
+
+        # Create tasks for FINN URLs
+        for url in finn_urls:
+            task = await db_service.create_scan_task(
+                user_id=request.user_id,
+                url=url,
+                source='FINN',
+                scan_type=request.scan_type
+            )
+            created_tasks.append(task)
 
         # Log scan start
-        await db_service.log_monitoring_event(
-            request.user_id,
-            'SCAN_STARTED',
-            {
-                'scan_type': request.scan_type,
-                'nav_urls_count': len(nav_urls),
-                'finn_urls_count': len(finn_urls)
-            }
-        )
-
-        # Run scan and analysis
-        result = await scraper_service.scan_and_analyze_jobs(
-            request.user_id,
-            nav_urls,
-            finn_urls,
-            user_profile,
-            min_relevance
+        await db_service.create_monitoring_log(
+            user_id=request.user_id,
+            scan_type=request.scan_type,
+            status='RUNNING',
+            jobs_found=0,
+            jobs_relevant=0
         )
 
         return {
-            "message": "Job scan completed successfully",
+            "message": f"Created {len(created_tasks)} scan tasks. Worker will process them shortly.",
             "user_id": request.user_id,
             "scan_type": request.scan_type,
-            "stats": result
+            "tasks_created": len(created_tasks),
+            "tasks": [{"id": t.get('id'), "url": t.get('url')[:50] + "..."} for t in created_tasks]
         }
 
     except HTTPException:
