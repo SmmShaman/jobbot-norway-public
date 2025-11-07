@@ -471,3 +471,4 @@ MIT License - See LICENSE file for details
 # Cloud Run deployment
 # Cloud Run ready
 # Cloud Run with project ID
+# Artifact Registry enabled
