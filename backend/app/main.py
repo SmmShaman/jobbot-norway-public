@@ -42,7 +42,8 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Health check endpoint with CORS enabled"""
+    return {"status": "healthy", "cors": "enabled"}
 
 
 if __name__ == "__main__":
