@@ -3,7 +3,7 @@ name: Deploy to Google Cloud Run
 on:
   push:
     branches:
-      - claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+      - claude/netlify-ui-011CUqJXNw4wkoYPis8TAkxF
       - main
     paths:
       - 'backend/**'
