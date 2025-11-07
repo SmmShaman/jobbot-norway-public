@@ -477,3 +477,4 @@ MIT License - See LICENSE file for details
 # Container Registry API enabled
 # Artifact Registry repository created
 # Cloud Run API enabled
+# Cloud Run admin permissions granted
