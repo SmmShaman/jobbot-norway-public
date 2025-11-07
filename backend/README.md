@@ -474,3 +474,4 @@ MIT License - See LICENSE file for details
 # Artifact Registry enabled
 # Artifact Registry permissions fixed
 # Artifact Registry repo admin added
+# Container Registry API enabled
