@@ -6,3 +6,13 @@ data/logs/
 *_old.py
 test_*.py
 *_backup_*.py
+
+# Google Cloud SDK and keys
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz
+gcp-key.json
+*-key.json
+
+# Environment variables
+RENDER_ENV_VARS.txt
+*.env.local
