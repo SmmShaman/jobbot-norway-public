@@ -479,3 +479,4 @@ MIT License - See LICENSE file for details
 # Cloud Run API enabled
 # Cloud Run admin permissions granted
 # Fresh Cloud Run deployment
+# Deploy with CORS fix to new service
