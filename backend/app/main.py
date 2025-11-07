@@ -15,9 +15,10 @@ app = FastAPI(
 )
 
 # CORS configuration
+# Google Cloud Run uses ^:^ as delimiter for env vars with commas
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS.split(","),
+    allow_origins=settings.CORS_ORIGINS.replace("^:^", ",").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
