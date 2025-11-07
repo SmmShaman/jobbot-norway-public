@@ -2,7 +2,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats, useMonitoringLogs } from '@/hooks/useDashboard';
 import { useScanJobs } from '@/hooks/useJobs';
 import { Briefcase, CheckCircle, Clock, FileText, PlayCircle } from 'lucide-react';
-import WorkerMonitor from '@/components/WorkerMonitor';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -92,9 +91,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-
-      {/* Worker Monitor */}
-      <WorkerMonitor />
 
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow">

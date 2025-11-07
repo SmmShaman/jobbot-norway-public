@@ -1,0 +1,10 @@
+# JobBot Worker Dependencies
+
+# Supabase Python client
+supabase==2.7.4
+
+# HTTP requests
+requests==2.31.0
+
+# Environment variables
+python-dotenv==1.0.0
