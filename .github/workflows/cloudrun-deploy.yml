@@ -81,7 +81,6 @@ jobs:
             --set-env-vars "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" \
             --set-env-vars "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
             --set-env-vars "DEBUG=false" \
-            --set-env-vars "CORS_ORIGINS=http://localhost:3000^:^http://localhost:5173^:^https://jobbotnetlify.netlify.app" \
             --set-env-vars "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" \
             --set-env-vars "SPACY_API_KEY=${{ secrets.SPACY_API_KEY }}" \
             --set-env-vars "SKYVERN_API_URL=${{ secrets.SKYVERN_API_URL }}"
