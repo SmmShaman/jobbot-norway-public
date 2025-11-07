@@ -470,3 +470,4 @@ MIT License - See LICENSE file for details
 **Built with ❤️ for job seekers in Norway**
 # Cloud Run deployment
 # Cloud Run ready
+# Cloud Run with project ID
