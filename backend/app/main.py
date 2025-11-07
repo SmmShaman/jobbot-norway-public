@@ -2,11 +2,13 @@
 JobBot Norway - FastAPI Backend
 Main application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.routers import jobs, applications, monitoring
 from app.routers import settings as settings_router
 from app.config import settings
+import traceback
 
 app = FastAPI(
     title="JobBot Norway API",
@@ -23,6 +25,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Global exception handler to ensure CORS headers on all responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all exceptions and ensure CORS headers are present"""
+    error_detail = str(exc)
+    error_traceback = traceback.format_exc()
+
+    # Log the error (in production you'd use proper logging)
+    print(f"ERROR: {error_detail}")
+    print(f"Traceback: {error_traceback}")
+
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": error_detail, "type": "internal_server_error"}
+    )
+
+    # Manually add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+
+    return response
+
 
 # Include routers
 app.include_router(jobs.router, prefix="/api", tags=["jobs"])
