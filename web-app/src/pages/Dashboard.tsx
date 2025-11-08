@@ -1,13 +1,19 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useDashboardStats, useMonitoringLogs } from '@/hooks/useDashboard';
+import { useDashboardStats } from '@/hooks/useDashboard';
 import { useScanJobs } from '@/hooks/useJobs';
-import { Briefcase, CheckCircle, Clock, FileText, PlayCircle } from 'lucide-react';
+import { useScanTasks, useCancelScanTask, useDeleteScanTask } from '@/hooks/useScanTasks';
+import { Briefcase, CheckCircle, Clock, FileText, PlayCircle, StopCircle, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
-  const { data: logs } = useMonitoringLogs(user?.id || '', 5);
+  const { data: scanTasks, isLoading: scanTasksLoading } = useScanTasks(user?.id || '', 5);
   const scanJobs = useScanJobs();
+  const cancelTask = useCancelScanTask();
+  const deleteTask = useDeleteScanTask();
+
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const handleScanNow = () => {
     if (user) {
@@ -15,6 +21,21 @@ export default function Dashboard() {
         user_id: user.id,
         scan_type: 'MANUAL',
       });
+    }
+  };
+
+  const handleCancelTask = (taskId: string) => {
+    cancelTask.mutate(taskId);
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (deleteConfirmId === taskId) {
+      deleteTask.mutate(taskId);
+      setDeleteConfirmId(null);
+    } else {
+      setDeleteConfirmId(taskId);
+      // Reset confirmation after 3 seconds
+      setTimeout(() => setDeleteConfirmId(null), 3000);
     }
   };
 
@@ -98,41 +119,84 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-gray-900">Recent Scans</h2>
         </div>
         <div className="p-6">
-          {!logs || logs.length === 0 ? (
+          {scanTasksLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            </div>
+          ) : !scanTasks || scanTasks.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No recent activity. Click "Scan Jobs Now" to get started!</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {logs.map((log) => (
+              {scanTasks.map((task) => (
                 <div
-                  key={log.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  key={task.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium text-gray-900">
-                      {log.scan_type} Scan
+                      {task.scan_type} Scan
                     </p>
                     <p className="text-sm text-gray-600">
-                      {log.jobs_found} jobs found • {log.jobs_relevant} relevant
+                      {task.jobs_found || 0} jobs found • {task.jobs_saved || 0} saved
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(log.started_at).toLocaleString()}
+                      {new Date(task.created_at).toLocaleString()}
+                    </p>
+                    {task.error_message && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Error: {task.error_message}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1 truncate max-w-md">
+                      {task.url}
                     </p>
                   </div>
-                  <div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Status Badge */}
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        log.status === 'COMPLETED'
+                      className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
+                        task.status === 'COMPLETED'
                           ? 'bg-green-100 text-green-800'
-                          : log.status === 'FAILED'
+                          : task.status === 'FAILED'
                           ? 'bg-red-100 text-red-800'
+                          : task.status === 'PROCESSING'
+                          ? 'bg-blue-100 text-blue-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}
                     >
-                      {log.status}
+                      {task.status}
                     </span>
+
+                    {/* Action Buttons */}
+                    {(task.status === 'PENDING' || task.status === 'PROCESSING') && (
+                      <button
+                        onClick={() => handleCancelTask(task.id)}
+                        disabled={cancelTask.isPending}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Cancel scan"
+                      >
+                        <StopCircle className="w-5 h-5" />
+                      </button>
+                    )}
+
+                    {(task.status === 'COMPLETED' || task.status === 'FAILED') && (
+                      <button
+                        onClick={() => handleDeleteTask(task.id)}
+                        disabled={deleteTask.isPending}
+                        className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+                          deleteConfirmId === task.id
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : 'text-gray-600 hover:bg-gray-200'
+                        }`}
+                        title={deleteConfirmId === task.id ? 'Click again to confirm' : 'Delete task'}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

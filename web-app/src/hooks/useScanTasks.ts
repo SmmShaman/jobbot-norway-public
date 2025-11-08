@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
 export interface ScanTask {
@@ -83,5 +83,53 @@ export const useScanTaskStats = (userId: string) => {
     },
     enabled: !!userId,
     refetchInterval: 5000, // Refresh every 5 seconds
+  });
+};
+
+// Mutation: Cancel/Pause scan task
+export const useCancelScanTask = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { data, error } = await supabase
+        .from('scan_tasks')
+        .update({
+          status: 'FAILED',
+          error_message: 'Cancelled by user',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch scan tasks
+      queryClient.invalidateQueries({ queryKey: ['scan_tasks'] });
+    },
+  });
+};
+
+// Mutation: Delete scan task
+export const useDeleteScanTask = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      const { error } = await supabase
+        .from('scan_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+      return taskId;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch scan tasks
+      queryClient.invalidateQueries({ queryKey: ['scan_tasks'] });
+    },
   });
 };
