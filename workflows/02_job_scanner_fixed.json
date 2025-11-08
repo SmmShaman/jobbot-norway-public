@@ -1,5 +1,8 @@
 {
   "name": "AI Relevance Analyzer - Improved",
+  "description": "AI аналіз релевантності вакансій. Оцінює відповідність вакансій профілю користувача за допомогою Azure OpenAI.",
+  "version": "2.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {

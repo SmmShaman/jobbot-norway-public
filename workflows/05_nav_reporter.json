@@ -1,5 +1,8 @@
 {
   "name": "NAV Reporter",
+  "description": "Автоматичне звітування до NAV.no про відправлені заявки на роботу. Використовує BankID для автентифікації.",
+  "version": "1.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {

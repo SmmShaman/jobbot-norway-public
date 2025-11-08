@@ -1,5 +1,8 @@
 {
   "name": "Smart Form Filler",
+  "description": "Автоматичне заповнення форм заявок на роботу. Аналізує сторінки та заповнює поля через Playwright.",
+  "version": "1.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {
