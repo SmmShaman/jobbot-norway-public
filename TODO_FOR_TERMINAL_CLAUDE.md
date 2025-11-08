@@ -1,32 +1,53 @@
 # ⚠️ URGENT TODO for Terminal Claude
 
-## 🎉 PROGRESS UPDATE
+## 🎉 ROOT CAUSE FOUND & FIXED!
 
-✅ **Worker processed task 68989ec7** - Task completed but NO RESULTS!
+✅ **Browser Claude identified the problem:**
+- Skyvern 2.0 API uses `navigation_goal` + `data_extraction_goal` (NOT `prompt`)
+- Field name was `data_extraction_schema` but should be `extracted_information_schema`
+- Cookie banner was blocking content (now handling it!)
 
-🔍 **Need DEBUG logs NOW** - Show what Skyvern returned
+✅ **All templates fixed:**
+- FINN template updated with correct field names + cookie handling
+- NAV template updated
+- DETAIL template updated
+- Timeouts increased to 90 seconds
 
 ---
 
-## 🚨 SHOW DEBUG LOGS FOR TASK 68989ec7
+## 🚀 TEST THE FIX NOW!
 
-**Run these commands and share the output:**
-
+**Step 1: Pull latest changes**
 ```bash
-cd ~/jobbot-norway-public/worker
-
-# Get full debug output for task 68989ec7
-grep -A 100 -B 10 "68989ec7" worker.log | grep -A 50 "DEBUG"
+cd ~/jobbot-norway-public
+git pull origin claude/jobbot-norway-metadata-011CUuyJhire2DdZRPu76sND
 ```
 
-**If that doesn't show anything, try:**
-
+**Step 2: Restart Worker**
 ```bash
-# Get last 300 lines of worker log
-tail -300 worker.log > /tmp/worker_debug.txt
+pkill -f "python.*worker.py"
+cd ~/jobbot-norway-public/worker
+export SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+nohup python worker.py > worker.log 2>&1 &
+```
 
-# Share the file content
-cat /tmp/worker_debug.txt
+**Step 3: Create NEW task via Dashboard**
+Use a FINN.no URL like:
+```
+https://www.finn.no/job/search?location=2.20001.22034.20097&published=1
+```
+
+**Step 4: Monitor logs**
+```bash
+tail -f ~/jobbot-norway-public/worker/worker.log
+```
+
+**What to look for:**
+```
+🔍 DEBUG: Full Skyvern result keys: [..., 'navigation_goal', 'data_extraction_goal', 'extracted_information_schema', ...]
+🔍 DEBUG: extracted_information type: <class 'dict'>
+🔍 DEBUG: extracted_information keys: ['jobs']  ← SHOULD SEE THIS!
+✅ Found X job URLs  ← SHOULD SEE JOBS!
 ```
 
 ---
