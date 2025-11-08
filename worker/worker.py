@@ -186,41 +186,67 @@ class JobBotWorker:
     def _wait_for_skyvern_task(self, task_id: str, max_wait: int = 300) -> Optional[Dict]:
         """Poll Skyvern task status until completion"""
         start_time = time.time()
+        poll_count = 0
 
         # Prepare headers with API key if available
         headers = {}
         if self.skyvern_api_key:
             headers['x-api-key'] = self.skyvern_api_key
 
+        logger.info(f"🔄 Starting to poll Skyvern task: {task_id}")
+
         while time.time() - start_time < max_wait:
             try:
+                poll_count += 1
+                elapsed = int(time.time() - start_time)
+                logger.info(f"📡 Poll #{poll_count} (elapsed: {elapsed}s) - GET /api/v1/tasks/{task_id}")
+
                 response = requests.get(
                     f"{self.skyvern_url}/api/v1/tasks/{task_id}",
-                    headers=headers
+                    headers=headers,
+                    timeout=30
                 )
+
+                logger.info(f"📥 Response status: {response.status_code}")
 
                 if response.status_code == 200:
                     task_data = response.json()
                     status = task_data.get('status')
 
+                    # DEBUG: Show what we got
+                    logger.info(f"🔍 Task status: {status}")
+                    logger.info(f"🔍 Response keys: {list(task_data.keys())[:10]}")
+
+                    has_extracted = 'extracted_information' in task_data
+                    extracted_value = task_data.get('extracted_information')
+                    logger.info(f"🔍 Has extracted_information: {has_extracted}, Value type: {type(extracted_value)}")
+
                     if status == 'completed':
                         logger.info(f"✅ Skyvern task completed: {task_id}")
+                        logger.info(f"📊 Full response (first 1500 chars): {json.dumps(task_data, ensure_ascii=False)[:1500]}...")
                         return task_data
                     elif status == 'failed':
                         logger.error(f"❌ Skyvern task failed: {task_id}")
+                        logger.error(f"❌ Failure reason: {task_data.get('failure_reason', 'Unknown')}")
                         return task_data
                     else:
-                        logger.info(f"⏳ Skyvern task {status}: {task_id}")
+                        logger.info(f"⏳ Skyvern task {status}: {task_id} (waiting 5s...)")
                         time.sleep(5)  # Wait 5 seconds before next check
                 else:
-                    logger.warning(f"⚠️ Task status check failed: {response.status_code}")
+                    logger.warning(f"⚠️ Task status check failed: HTTP {response.status_code}")
+                    logger.warning(f"⚠️ Response: {response.text[:500]}")
                     time.sleep(5)
 
+            except requests.exceptions.Timeout:
+                logger.error(f"❌ Timeout while checking task status (after 30s)")
+                time.sleep(5)
             except Exception as e:
                 logger.error(f"❌ Error checking task status: {e}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
                 time.sleep(5)
 
-        logger.error(f"❌ Skyvern task timeout: {task_id}")
+        logger.error(f"❌ Skyvern task timeout after {int(time.time() - start_time)}s ({poll_count} polls): {task_id}")
         return None
 
     def save_job_urls_immediately(self, jobs: List[Dict], task_id: str, user_id: str, source: str) -> int:
