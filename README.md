@@ -96,12 +96,32 @@ Read CLAUDE.md
 ```bash
 # На локальному ПК користувач запускає:
 cd ~/jobbot-norway-public
-claude --dangerously-skip-permissions
+claude --dangerously-skip-permissions  # ← Автономна робота БЕЗ переспитувань!
 
 # Ця локальна сесія може:
 # - Запускати Worker (python3 worker/worker.py)
 # - Налаштовувати Skyvern
 # - Виконувати git pull для оновлення
+# - Створювати .env файли
+# - Встановлювати pip packages
+# - Запускати docker-compose
+```
+
+**⚡ ВАЖЛИВО:** Флаг `--dangerously-skip-permissions` потрібен щоб Claude:
+- Не питав дозволу на кожну команду
+- Працював автономно
+- Виконував всі інструкції самостійно
+
+**Приклад інструкцій для локальної Claude сесії:**
+```
+"Виконай автоматичний setup Worker:
+1. cd worker
+2. pip install -r requirements.txt
+3. Створи .env з ключами що я дам
+4. Перевір Skyvern: curl http://localhost:8000/api/v1/health
+5. Запусти Worker: python3 worker.py
+
+Працюй автономно, не питай підтвердження на кожен крок!"
 ```
 
 **Твоя роль (браузерна сесія):**
