@@ -190,10 +190,9 @@ class JobBotWorker:
         logger.error(f"❌ Skyvern task timeout: {task_id}")
         return None
 
-    def save_jobs_to_database(self, jobs: List[Dict], task_id: str, user_id: str, source: str):
-        """Save extracted jobs to Supabase with full details and duplicate handling"""
+    def save_job_urls_immediately(self, jobs: List[Dict], task_id: str, user_id: str, source: str) -> int:
+        """STAGE 1: Save job URLs immediately with minimal data so they appear in Dashboard right away"""
         saved_count = 0
-        updated_count = 0
 
         for job in jobs:
             try:
@@ -202,7 +201,7 @@ class JobBotWorker:
                     logger.warning(f"⚠️ Skipping job without URL: {job.get('title', 'N/A')}")
                     continue
 
-                # Prepare comprehensive job data
+                # Prepare minimal job data (just URL + basic info)
                 job_data = {
                     # Required fields
                     'user_id': user_id,
@@ -212,77 +211,101 @@ class JobBotWorker:
                     'company': job.get('company', 'Unknown Company'),
                     'url': job.get('url'),
 
-                    # Job details
+                    # Basic info from listing page
                     'location': job.get('location'),
-                    'description': job.get('description'),
-
-                    # Contact information
-                    'contact_name': job.get('contact_name'),
-                    'contact_email': job.get('contact_email'),
-                    'contact_phone': job.get('contact_phone'),
-
-                    # Address details
-                    'address': job.get('address'),
-                    'city': job.get('city'),
-                    'postalCode': job.get('postalCode') or job.get('postal_code'),
-                    'county': job.get('county'),
-                    'country': job.get('country', 'NORGE'),
-
-                    # Employment details
-                    'employment_type': job.get('employment_type'),
-                    'extent': job.get('extent'),
-                    'salary_range': job.get('salary_range'),
-                    'start_date': job.get('start_date'),
-                    'deadline': job.get('deadline'),
-
-                    # Arrays (PostgreSQL array types)
-                    'requirements': job.get('requirements', []) if isinstance(job.get('requirements'), list) else [],
-                    'responsibilities': job.get('responsibilities', []) if isinstance(job.get('responsibilities'), list) else [],
-                    'benefits': job.get('benefits', []) if isinstance(job.get('benefits'), list) else [],
-
-                    # Source-specific fields
-                    'finnkode': job.get('finnkode') if source == 'FINN' else None,
-                    'application_url': job.get('application_url'),
-
-                    # Dates
+                    'description': job.get('description'),  # Short description from listing
                     'posted_date': job.get('posted_date'),
-                    'scraped_at': datetime.utcnow().isoformat(),
+                    'finnkode': job.get('finnkode') if source == 'FINN' else None,
 
-                    # Processing status
+                    # Metadata
+                    'scraped_at': datetime.utcnow().isoformat(),
                     'status': 'NEW',
                     'is_processed': False,
-                    'skyvern_status': 'COMPLETED'
+                    'skyvern_status': 'URL_EXTRACTED',  # Mark that we only have URL so far
+
+                    # Empty arrays for now (will be filled in stage 2)
+                    'requirements': [],
+                    'responsibilities': [],
+                    'benefits': []
                 }
 
-                # Try to insert, update if duplicate
+                # Insert or update if exists
                 result = self.supabase.table('jobs').upsert(
                     job_data,
-                    on_conflict='user_id,url'  # Upsert based on unique constraint
+                    on_conflict='user_id,url'
                 ).execute()
 
                 if result.data:
-                    # Check if it was an insert or update
-                    if any('inserted' in str(result).lower() for _ in [1]):
-                        saved_count += 1
-                        logger.info(f"💾 Saved NEW job: {job_data['title'][:50]} at {job_data['company'][:30]}")
-                    else:
-                        updated_count += 1
-                        logger.info(f"🔄 Updated existing job: {job_data['title'][:50]}")
+                    saved_count += 1
+                    logger.info(f"✅ Saved URL: {job_data['title'][:40]} | {job_data['company'][:25]} | {job_data['url'][:50]}...")
 
             except Exception as e:
-                # Handle errors
                 error_msg = str(e).lower()
                 if 'duplicate' in error_msg or 'unique constraint' in error_msg:
-                    logger.info(f"⏭️ Job already exists (duplicate URL): {job.get('url', 'N/A')[:60]}...")
-                    updated_count += 1
+                    logger.info(f"⏭️ Job URL already exists: {job.get('url', 'N/A')[:60]}...")
                 else:
-                    logger.error(f"❌ Error saving job '{job.get('title', 'N/A')[:40]}': {e}")
+                    logger.error(f"❌ Error saving job URL '{job.get('title', 'N/A')[:40]}': {e}")
 
-        logger.info(f"📊 Database summary: {saved_count} new, {updated_count} updated")
+        logger.info(f"📊 Stage 1 complete: {saved_count} job URLs saved to database (visible in Dashboard now!)")
         return saved_count
 
+    def update_job_details(self, job_url: str, details: Dict, user_id: str) -> bool:
+        """STAGE 2: Update job with detailed information from job detail page"""
+        try:
+            # Prepare update data with all details
+            update_data = {
+                # Full description (from detail page, not listing summary)
+                'description': details.get('description'),
+
+                # Contact information
+                'contact_name': details.get('contact_name'),
+                'contact_email': details.get('contact_email'),
+                'contact_phone': details.get('contact_phone'),
+
+                # Address details
+                'address': details.get('address'),
+                'city': details.get('city'),
+                'postalCode': details.get('postalCode') or details.get('postal_code'),
+                'county': details.get('county'),
+                'country': details.get('country', 'Norge'),
+
+                # Employment details
+                'employment_type': details.get('employment_type'),
+                'extent': details.get('extent'),
+                'salary_range': details.get('salary_range'),
+                'start_date': details.get('start_date'),
+                'deadline': details.get('deadline'),
+
+                # Arrays
+                'requirements': details.get('requirements', []) if isinstance(details.get('requirements'), list) else [],
+                'responsibilities': details.get('responsibilities', []) if isinstance(details.get('responsibilities'), list) else [],
+                'benefits': details.get('benefits', []) if isinstance(details.get('benefits'), list) else [],
+
+                # Additional fields
+                'work_arrangement': details.get('work_arrangement'),
+                'application_url': details.get('application_url'),
+
+                # Update status
+                'skyvern_status': 'DETAILS_EXTRACTED',
+                'updated_at': datetime.utcnow().isoformat()
+            }
+
+            # Update existing job by URL
+            result = self.supabase.table('jobs').update(update_data).eq('url', job_url).eq('user_id', user_id).execute()
+
+            if result.data:
+                logger.info(f"✅ Updated details for: {job_url[:60]}...")
+                return True
+            else:
+                logger.warning(f"⚠️ No job found to update for URL: {job_url[:60]}...")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Error updating job details for {job_url[:60]}: {e}")
+            return False
+
     def process_task(self, task: Dict):
-        """Process a single scan task"""
+        """Process a single scan task with 2-stage approach"""
         task_id = task['id']
         url = task['url']
         source = task['source']
@@ -298,7 +321,8 @@ class JobBotWorker:
         self.update_task_status(task_id, 'PROCESSING')
 
         try:
-            # Step 1: Get list of jobs from search page
+            # ========== STAGE 1: Extract job URLs from listing page ==========
+            logger.info("🔍 STAGE 1: Extracting job URLs from listing page...")
             template_key = source  # 'FINN' or 'NAV'
             result = self.call_skyvern(template_key, url)
 
@@ -319,46 +343,70 @@ class JobBotWorker:
                 )
                 return
 
-            logger.info(f"📊 Found {len(jobs_list)} jobs")
+            logger.info(f"✅ Found {len(jobs_list)} job URLs")
 
-            # Step 2: For each job, get detailed information
-            detailed_jobs = []
+            # IMMEDIATELY save URLs to database (user will see them in Dashboard!)
+            saved_urls_count = self.save_job_urls_immediately(jobs_list, task_id, user_id, source)
+
+            # Update task with URLs saved
+            self.update_task_status(
+                task_id,
+                'PROCESSING',
+                jobs_found=len(jobs_list),
+                jobs_saved=saved_urls_count
+            )
+
+            logger.info(f"✅ Stage 1 complete: {saved_urls_count} jobs visible in Dashboard!")
+
+            # ========== STAGE 2: Extract detailed info for each job ==========
+            logger.info(f"\n🔍 STAGE 2: Extracting details for {len(jobs_list)} jobs...")
+
+            details_success_count = 0
             for i, job in enumerate(jobs_list, 1):
                 job_url = job.get('url')
                 if not job_url:
-                    logger.warning(f"⚠️ Job {i} has no URL, skipping detail extraction")
-                    detailed_jobs.append(job)
+                    logger.warning(f"⚠️ Job {i}/{len(jobs_list)} has no URL, skipping detail extraction")
                     continue
 
-                logger.info(f"🔍 Extracting details for job {i}/{len(jobs_list)}: {job.get('title', 'N/A')[:40]}...")
+                logger.info(f"\n📄 [{i}/{len(jobs_list)}] Getting details: {job.get('title', 'N/A')[:45]}...")
+                logger.info(f"    URL: {job_url[:70]}...")
 
+                # Call Skyvern to get job details
                 detail_result = self.call_skyvern('DETAIL', job_url)
 
                 if detail_result and detail_result.get('extracted_information'):
-                    # Merge list data with detailed data
-                    detailed_job = {**job, **detail_result['extracted_information']}
-                    detailed_jobs.append(detailed_job)
-                    logger.info(f"✅ Got detailed data for: {detailed_job.get('title', 'N/A')[:40]}")
+                    # Update database with detailed information
+                    details = detail_result['extracted_information']
+                    success = self.update_job_details(job_url, details, user_id)
+
+                    if success:
+                        details_success_count += 1
+                        logger.info(f"✅ [{i}/{len(jobs_list)}] Details saved! (Contact: {details.get('contact_name', 'N/A')}, Email: {details.get('contact_email', 'N/A')})")
+                    else:
+                        logger.warning(f"⚠️ [{i}/{len(jobs_list)}] Failed to update database with details")
                 else:
-                    # Use basic data if detail extraction failed
-                    logger.warning(f"⚠️ Detail extraction failed, using basic data")
-                    detailed_jobs.append(job)
+                    logger.warning(f"⚠️ [{i}/{len(jobs_list)}] Skyvern didn't extract details, job will have URL only")
 
                 # Small delay to avoid overwhelming Skyvern
                 time.sleep(2)
 
-            # Step 3: Save all jobs to database
-            saved_count = self.save_jobs_to_database(detailed_jobs, task_id, user_id, source)
+            logger.info(f"\n✅ Stage 2 complete: {details_success_count}/{len(jobs_list)} jobs have full details")
 
             # Update task as completed
             self.update_task_status(
                 task_id,
                 'COMPLETED',
                 jobs_found=len(jobs_list),
-                jobs_saved=saved_count
+                jobs_saved=saved_urls_count  # URLs saved, details are extra
             )
 
-            logger.info(f"\n✅ Task completed: {saved_count}/{len(jobs_list)} jobs saved\n")
+            logger.info(f"\n{'='*60}")
+            logger.info(f"✅ Task completed successfully!")
+            logger.info(f"📊 Summary:")
+            logger.info(f"   - URLs found: {len(jobs_list)}")
+            logger.info(f"   - URLs saved: {saved_urls_count}")
+            logger.info(f"   - Details extracted: {details_success_count}")
+            logger.info(f"{'='*60}\n")
 
         except Exception as e:
             logger.error(f"❌ Task failed: {e}")

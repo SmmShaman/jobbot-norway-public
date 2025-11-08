@@ -1,51 +1,60 @@
 {
-  "name": "FINN.no Job Listing Scraper",
-  "description": "Extract job listings from FINN.no search results page",
   "url": "PLACEHOLDER_URL",
   "webhook_callback_url": null,
-  "navigation_goal": "Navigate through the job listings page and extract all visible job postings. Click 'Last inn flere' (Load more) if available to get more results.",
-  "data_extraction_goal": "Extract the following information from each job listing card:\n1. Job title (exact text)\n2. Company name\n3. Location (city/region)\n4. Job posting URL (full link to job details)\n5. Short description/summary if visible\n6. Posted date if visible\n\nReturn results as a JSON array with objects containing: {title, company, location, url, description, posted_date}",
+  "prompt": "Navigate to this FINN.no job search results page and extract ALL job listings visible on the page. If there's a 'Last inn flere' (Load more) button at the bottom, click it to load more jobs and extract those as well. Repeat loading more until no more jobs can be loaded or you've scrolled 5 times.\n\nFor EACH job listing card/item on the page, extract:\n1. Job title (exact text from the listing)\n2. Company name\n3. Location (city/region shown)\n4. Full URL to the job posting (complete link, not relative)\n5. Short description or summary if visible on the card\n6. Posted date if shown (e.g. '2 dager siden', 'I dag', etc.)\n7. FINNKODE if visible (job ID number)\n\nIMPORTANT: Make sure to get the COMPLETE URL for each job posting - it should start with https://www.finn.no/job/fulltime/ad.html or similar.\n\nReturn the data as a JSON array named 'jobs' with each job as an object containing these fields.",
   "navigation_payload": {
-    "wait_for_network_idle": true,
-    "timeout": 30000,
-    "scroll_to_load_more": true,
-    "max_scrolls": 5
+    "timeout_ms": 45000
   },
-  "extracted_information_schema": {
-    "type": "object",
-    "properties": {
-      "jobs": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "title": {
-              "type": "string",
-              "description": "Job title"
-            },
-            "company": {
-              "type": "string",
-              "description": "Company name"
-            },
-            "location": {
-              "type": "string",
-              "description": "Job location (city/region)"
-            },
-            "url": {
-              "type": "string",
-              "description": "Full URL to job posting"
-            },
-            "description": {
-              "type": "string",
-              "description": "Short job description or summary"
-            },
-            "posted_date": {
-              "type": "string",
-              "description": "When the job was posted (e.g. '2 dager siden')"
-            }
+  "data_extraction_schema": {
+    "jobs": {
+      "type": "list",
+      "description": "List of all job postings found on the search results page",
+      "elements": {
+        "type": "object",
+        "attributes": [
+          {
+            "name": "title",
+            "type": "string",
+            "description": "Job title as shown on the listing card",
+            "is_required": true
           },
-          "required": ["title", "company", "url"]
-        }
+          {
+            "name": "company",
+            "type": "string",
+            "description": "Company name",
+            "is_required": true
+          },
+          {
+            "name": "location",
+            "type": "string",
+            "description": "Job location (city/region)",
+            "is_required": false
+          },
+          {
+            "name": "url",
+            "type": "string",
+            "description": "Full URL to job posting (must be complete URL starting with https://)",
+            "is_required": true
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "description": "Short job description or summary visible on card",
+            "is_required": false
+          },
+          {
+            "name": "posted_date",
+            "type": "string",
+            "description": "When the job was posted (e.g. '2 dager siden')",
+            "is_required": false
+          },
+          {
+            "name": "finnkode",
+            "type": "string",
+            "description": "FINN.no job code/ID if visible",
+            "is_required": false
+          }
+        ]
       }
     }
   },
