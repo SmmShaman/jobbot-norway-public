@@ -133,3 +133,48 @@ export const useDeleteScanTask = () => {
     },
   });
 };
+
+// Mutation: Create new scan task
+export const useCreateScanTask = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { user_id: string; url: string; scan_type: 'MANUAL' | 'SCHEDULED' | 'QUICK'; source?: 'FINN' | 'NAV' }) => {
+      // Auto-detect source from URL if not provided
+      let source = params.source;
+      if (!source) {
+        if (params.url.includes('finn.no')) {
+          source = 'FINN';
+        } else if (params.url.includes('nav.no') || params.url.includes('arbeidsplassen.nav.no')) {
+          source = 'NAV';
+        } else {
+          source = 'FINN'; // Default to FINN
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('scan_tasks')
+        .insert({
+          user_id: params.user_id,
+          url: params.url,
+          scan_type: params.scan_type,
+          source,
+          status: 'PENDING',
+          jobs_found: 0,
+          jobs_saved: 0,
+          retry_count: 0,
+          max_retries: 3,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch scan tasks
+      queryClient.invalidateQueries({ queryKey: ['scan_tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
+};

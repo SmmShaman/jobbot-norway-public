@@ -1,7 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats } from '@/hooks/useDashboard';
-import { useScanJobs } from '@/hooks/useJobs';
-import { useScanTasks, useCancelScanTask, useDeleteScanTask } from '@/hooks/useScanTasks';
+import { useScanTasks, useCancelScanTask, useDeleteScanTask, useCreateScanTask } from '@/hooks/useScanTasks';
 import { Briefcase, CheckCircle, Clock, FileText, PlayCircle, StopCircle, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -9,16 +8,18 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
   const { data: scanTasks, isLoading: scanTasksLoading } = useScanTasks(user?.id || '', 5);
-  const scanJobs = useScanJobs();
+  const createScanTask = useCreateScanTask();
   const cancelTask = useCancelScanTask();
   const deleteTask = useDeleteScanTask();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [scanUrl, setScanUrl] = useState('https://www.finn.no/job/search?location=2.20001.22034.20097&location=2.20001.22034.20098&location=2.20001.22034.20085&published=1');
 
   const handleScanNow = () => {
-    if (user) {
-      scanJobs.mutate({
+    if (user && scanUrl.trim()) {
+      createScanTask.mutate({
         user_id: user.id,
+        url: scanUrl.trim(),
         scan_type: 'MANUAL',
       });
     }
@@ -69,21 +70,34 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            Welcome back, {user?.user_metadata?.full_name || user?.email}!
-          </p>
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1">
+              Welcome back, {user?.user_metadata?.full_name || user?.email}!
+            </p>
+          </div>
         </div>
-        <button
-          onClick={handleScanNow}
-          disabled={scanJobs.isPending}
-          className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors"
-        >
-          <PlayCircle className="w-5 h-5" />
-          {scanJobs.isPending ? 'Scanning...' : 'Scan Jobs Now'}
-        </button>
+
+        {/* Scan URL Input */}
+        <div className="flex gap-3">
+          <input
+            type="url"
+            value={scanUrl}
+            onChange={(e) => setScanUrl(e.target.value)}
+            placeholder="Enter FINN.no or NAV.no job search URL..."
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <button
+            onClick={handleScanNow}
+            disabled={createScanTask.isPending || !scanUrl.trim()}
+            className="flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            <PlayCircle className="w-5 h-5" />
+            {createScanTask.isPending ? 'Scanning...' : 'Scan Jobs Now'}
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
