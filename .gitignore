@@ -7,6 +7,10 @@ data/logs/
 test_*.py
 *_backup_*.py
 
+# Debug output files
+scripts/*_sample.html
+scripts/finn_sample.html
+
 # Google Cloud SDK and keys
 google-cloud-sdk/
 google-cloud-cli-*.tar.gz
