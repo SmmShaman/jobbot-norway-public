@@ -16,3 +16,7 @@ gcp-key.json
 # Environment variables
 RENDER_ENV_VARS.txt
 *.env.local
+
+# Node.js dependencies
+node_modules/
+web-app/node_modules/
