@@ -108,28 +108,73 @@ jobbot-norway-public/
 
 ---
 
-## 🔐 Environment Variables
+## 🔐 Environment Variables & Setup
+
+### Supabase Keys (де взяти?)
+
+**Зайти в Supabase Dashboard:**
+https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/settings/api
+
+**Скопіювати:**
+- `Project URL` → використовувати як `SUPABASE_URL`
+- `anon public` key → для Frontend (`VITE_SUPABASE_ANON_KEY`)
+- `service_role` key → для Backend і Worker (`SUPABASE_SERVICE_KEY`) ⚠️ СЕКРЕТНИЙ!
+
+---
 
 ### Frontend (`web-app/.env`)
+
+**Створити файл:**
 ```bash
+cd web-app
+cat > .env << 'EOF'
 VITE_SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon_key>
+VITE_SUPABASE_ANON_KEY=<скопіювати_з_supabase>
 VITE_API_URL=https://jobbot-backend-255588880592.us-central1.run.app
+EOF
 ```
 
-### Backend (Cloud Run env vars)
+**Netlify Dashboard (для продакшн):**
+1. Відкрити: https://app.netlify.com/sites/jobbot-norway/configuration/env
+2. Додати змінні:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_API_URL`
+
+---
+
+### Backend (Cloud Run)
+
+**Налаштувати через gcloud CLI:**
 ```bash
-SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co
-SUPABASE_SERVICE_KEY=<service_role_key>
-ALLOWED_ORIGINS=https://jobbot-norway.netlify.app
+gcloud run services update jobbot-backend \
+  --region=us-central1 \
+  --set-env-vars="SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co" \
+  --set-env-vars="SUPABASE_SERVICE_KEY=<скопіювати_з_supabase>" \
+  --set-env-vars="ALLOWED_ORIGINS=https://jobbot-norway.netlify.app"
 ```
+
+**Або через Console:**
+https://console.cloud.google.com/run/detail/us-central1/jobbot-backend/variables-and-secrets
+
+---
 
 ### Worker (`worker/.env`)
+
+**На локальному ПК користувача:**
 ```bash
+cd ~/jobbot-norway-public/worker
+cat > .env << 'EOF'
 SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co
-SUPABASE_SERVICE_KEY=<service_role_key>
+SUPABASE_SERVICE_KEY=<скопіювати_з_supabase>
 SKYVERN_API_URL=http://localhost:8000
+EOF
 ```
+
+**⚠️ ВАЖЛИВО:**
+- `.env` файли в `.gitignore` - НЕ коммітити!
+- `SUPABASE_SERVICE_KEY` має повний доступ - зберігати в секреті!
+- Попросити користувача надати ключі якщо не знаєш
 
 ---
 
