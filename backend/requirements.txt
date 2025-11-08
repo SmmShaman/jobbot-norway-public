@@ -24,3 +24,6 @@ asyncpg==0.29.0
 # Utils
 python-dotenv==1.0.0
 httpx==0.26.0
+
+# PDF generation for cover letters
+reportlab==4.0.7
