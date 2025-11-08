@@ -45,6 +45,7 @@ class JobBotWorker:
         self.supabase_url = os.getenv('SUPABASE_URL')
         self.supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
         self.skyvern_url = os.getenv('SKYVERN_API_URL', 'http://localhost:8000')
+        self.skyvern_api_key = os.getenv('SKYVERN_API_KEY', '')
 
         if not self.supabase_url or not self.supabase_key:
             raise ValueError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables")
@@ -62,6 +63,8 @@ class JobBotWorker:
         logger.info(f"🚀 Worker initialized: {self.worker_id}")
         logger.info(f"📡 Supabase: {self.supabase_url}")
         logger.info(f"🤖 Skyvern: {self.skyvern_url}")
+        if self.skyvern_api_key:
+            logger.info(f"🔑 Skyvern API Key: {'*' * 20}{self.skyvern_api_key[-8:]}")
 
     def _load_templates(self) -> Dict[str, dict]:
         """Load Skyvern task templates"""
@@ -88,7 +91,23 @@ class JobBotWorker:
         """Fetch pending scan tasks from Supabase"""
         try:
             response = self.supabase.table('scan_tasks').select('*').eq('status', 'PENDING').order('created_at').limit(5).execute()
-            return response.data if response.data else []
+
+            # Filter out tasks that have reached max retries (stuck tasks)
+            tasks = response.data if response.data else []
+            valid_tasks = []
+
+            for task in tasks:
+                retry_count = task.get('retry_count', 0)
+                max_retries = task.get('max_retries', 3)
+
+                if retry_count >= max_retries:
+                    # Mark stuck task as FAILED
+                    logger.warning(f"⚠️ Task {task['id'][:8]}... stuck in PENDING with {retry_count}/{max_retries} retries - marking as FAILED")
+                    self.update_task_status(task['id'], 'FAILED', error_message=task.get('error_message', 'Max retries reached'))
+                else:
+                    valid_tasks.append(task)
+
+            return valid_tasks
         except Exception as e:
             logger.error(f"❌ Error fetching tasks: {e}")
             return []
@@ -129,10 +148,16 @@ class JobBotWorker:
             logger.info(f"🤖 Calling Skyvern API: {self.skyvern_url}")
             logger.info(f"📄 Template: {template_key}, URL: {url[:50]}...")
 
+            # Prepare headers with API key if available
+            headers = {}
+            if self.skyvern_api_key:
+                headers['x-api-key'] = self.skyvern_api_key
+
             # Create Skyvern task
             response = requests.post(
                 f"{self.skyvern_url}/api/v1/tasks",
                 json=template,
+                headers=headers,
                 timeout=300  # 5 minutes timeout
             )
 
@@ -162,9 +187,17 @@ class JobBotWorker:
         """Poll Skyvern task status until completion"""
         start_time = time.time()
 
+        # Prepare headers with API key if available
+        headers = {}
+        if self.skyvern_api_key:
+            headers['x-api-key'] = self.skyvern_api_key
+
         while time.time() - start_time < max_wait:
             try:
-                response = requests.get(f"{self.skyvern_url}/api/v1/tasks/{task_id}")
+                response = requests.get(
+                    f"{self.skyvern_url}/api/v1/tasks/{task_id}",
+                    headers=headers
+                )
 
                 if response.status_code == 200:
                     task_data = response.json()
