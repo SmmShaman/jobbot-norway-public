@@ -1,11 +1,12 @@
 {
   "url": "PLACEHOLDER_URL",
   "webhook_callback_url": null,
-  "prompt": "Navigate to this FINN.no job search results page and extract ALL job listings visible on the page. If there's a 'Last inn flere' (Load more) button at the bottom, click it to load more jobs and extract those as well. Repeat loading more until no more jobs can be loaded or you've scrolled 5 times.\n\nFor EACH job listing card/item on the page, extract:\n1. Job title (exact text from the listing)\n2. Company name\n3. Location (city/region shown)\n4. Full URL to the job posting (complete link, not relative)\n5. Short description or summary if visible on the card\n6. Posted date if shown (e.g. '2 dager siden', 'I dag', etc.)\n7. FINNKODE if visible (job ID number)\n\nIMPORTANT: Make sure to get the COMPLETE URL for each job posting - it should start with https://www.finn.no/job/fulltime/ad.html or similar.\n\nReturn the data as a JSON array named 'jobs' with each job as an object containing these fields.",
+  "navigation_goal": "Navigate to this FINN.no job search results page. FIRST: If you see a cookie consent banner or 'Godta' button, click it to dismiss the banner. THEN: Scroll down the page to load all job listings. If there's a 'Last inn flere' (Load more) button at the bottom, click it to load more jobs. Repeat loading more until no more jobs can be loaded or you've scrolled 5 times.",
+  "data_extraction_goal": "Extract ALL job listings visible on the page after dismissing any cookie banners and loading all content. For EACH job listing card/item on the page, extract: Job title (exact text), Company name, Location (city/region), Full URL to the job posting (must be complete URL starting with https://www.finn.no/), Short description if visible, Posted date if shown (e.g. '2 dager siden'), and FINNKODE if visible.",
   "navigation_payload": {
-    "timeout_ms": 45000
+    "timeout_ms": 90000
   },
-  "data_extraction_schema": {
+  "extracted_information_schema": {
     "jobs": {
       "type": "list",
       "description": "List of all job postings found on the search results page",

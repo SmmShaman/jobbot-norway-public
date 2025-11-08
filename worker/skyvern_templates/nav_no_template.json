@@ -3,11 +3,11 @@
   "description": "Extract job listings from arbeidsplassen.nav.no search results",
   "url": "PLACEHOLDER_URL",
   "webhook_callback_url": null,
-  "navigation_goal": "Navigate through the NAV job search results page and extract all visible job postings. Handle pagination by clicking 'Neste' (Next) button if available to get more results.",
+  "navigation_goal": "Navigate through the NAV job search results page. FIRST: If you see a cookie consent banner, dismiss it. THEN: Extract all visible job postings. Handle pagination by clicking 'Neste' (Next) button if available to get more results.",
   "data_extraction_goal": "Extract the following information from each job listing:\n1. Job title (stillingstittel)\n2. Company/Employer name (arbeidsgiver)\n3. Location (arbeidssted)\n4. Job posting URL (full link to job details)\n5. Short description/summary\n6. Application deadline (søknadsfrist) if visible\n7. Employment type (stillingstype: fast, vikariat, etc)\n8. Extent (omfang: heltid, deltid)\n\nReturn results as a JSON array with objects containing: {title, company, location, url, description, deadline, employment_type, extent}",
   "navigation_payload": {
     "wait_for_network_idle": true,
-    "timeout": 30000,
+    "timeout_ms": 90000,
     "handle_pagination": true,
     "max_pages": 3
   },
