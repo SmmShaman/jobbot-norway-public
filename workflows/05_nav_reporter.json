@@ -1,5 +1,8 @@
 {
   "name": "NAV Reporter",
+  "description": "Автоматично звітує про подані заявки до NAV (Норвезька служба зайнятості). Використовує BankID для автентифікації.",
+  "version": "1.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {

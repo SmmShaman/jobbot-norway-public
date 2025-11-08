@@ -1,5 +1,8 @@
 {
   "name": "Smart Form Filler",
+  "description": "Автоматично заповнює форми подачі заявок на роботу. Використовує AI для аналізу форм та Skyvern/Playwright для взаємодії з веб-сайтами.",
+  "version": "1.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {

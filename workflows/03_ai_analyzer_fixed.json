@@ -1,5 +1,8 @@
 {
   "name": "AI Relevance Analyzer - Improved",
+  "description": "Аналізує релевантність вакансій за допомогою Azure OpenAI. Оцінює відповідність навичок, досвіду та локації кандидата вимогам вакансії.",
+  "version": "1.0",
+  "last_updated": "2025-11-08",
   "nodes": [
     {
       "parameters": {
