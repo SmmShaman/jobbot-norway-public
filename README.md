@@ -80,29 +80,89 @@ claude --dangerously-skip-permissions
 - Деплой на Cloud Run (gcloud commands)
 - Інструкції для користувача щодо локального Worker
 
-### Step 5: Continue Work
-Check the TODO list in SESSION_CONTEXT.md for next tasks.
+### Step 5: Read Full Context
+```bash
+Read SESSION_CONTEXT.md  # Детальна історія
+Read QUICK_START.md      # Швидкий довідник
+```
+
+### Step 6: YOUR FIRST ACTION - Start Here!
+
+**🎯 ПЕРШЕ ЩО ТРЕБА ЗРОБИТИ:**
+
+1. **Привітайся з користувачем українською:**
+```
+"Привіт! Я продовжую роботу над JobBot Norway.
+
+Я прочитав SESSION_CONTEXT.md і розумію що ми зробили.
+
+Перш ніж продовжити, скажи будь ласка:
+1. Ти вже створив таблицю jobs в Supabase? (виконав database/jobs_table_schema_fixed.sql)
+2. Worker працює на твоєму ПК зараз?
+3. Якщо є якісь проблеми або питання - розкажи!
+
+Після цього я продовжу з наступного пріоритетного завдання."
+```
+
+2. **Залежно від відповіді користувача:**
+
+**Якщо jobs table НЕ створена:**
+```
+"Окей, давай створимо таблицю jobs в Supabase.
+
+Відкрий: https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/sql/new
+
+Я зараз дам тобі SQL скрипт для виконання..."
+
+Read database/jobs_table_schema_fixed.sql
+# Показати користувачу і попросити виконати
+```
+
+**Якщо jobs table УЖЕ створена:**
+```
+"Чудово! Таблиця готова. Тепер давай протестуємо E2E flow:
+1. Ти запустиш Worker на своєму ПК
+2. Я допоможу налаштувати
+3. Протестуємо сканування вакансій з FINN.no
+4. Перевіримо що вони з'являються в Dashboard"
+```
 
 ---
 
 ## 📊 Current Status (2025-11-08)
 
-### ✅ Completed
-- Frontend deployed to Netlify (auto-deploy on push)
-- Backend deployed to Google Cloud Run
-- Database setup in Supabase with all tables
-- Worker running on local PC with Skyvern integration
-- Real-time Worker monitoring in Dashboard
-- Comprehensive Jobs page with all metadata (30+ fields)
-- Duplicate prevention (UNIQUE constraint on user_id + url)
+### ✅ Completed (Code Ready)
+- ✅ Frontend deployed to Netlify (auto-deploy on push)
+- ✅ Backend deployed to Google Cloud Run
+- ✅ Supabase tables: users, settings, scan_tasks, monitoring_logs
+- ✅ Worker code ready (`worker/worker.py`)
+- ✅ Skyvern templates created
+- ✅ Real-time Worker monitoring in Dashboard
+- ✅ Comprehensive Jobs page with all metadata (30+ fields)
+- ✅ SQL schema for jobs table with duplicate prevention
 
-### 🎯 Next Priority
-1. User needs to create `jobs` table in Supabase
-   - File: `database/jobs_table_schema_fixed.sql`
-   - Execute in Supabase SQL Editor
-2. Test end-to-end job scanning flow
-3. Improve Skyvern templates
-4. Add AI job relevance analysis
+### ⏳ Pending (Requires User Action)
+- ⏳ **CRITICAL:** User needs to create `jobs` table in Supabase
+  - File: `database/jobs_table_schema_fixed.sql`
+  - Execute in: https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/sql/new
+  - **ASK USER IF DONE!**
+- ⏳ Worker running on user's local PC
+  - **ASK USER: "Worker працює зараз?"**
+
+### 🎯 Next Tasks (After jobs table created)
+1. ✅ Test end-to-end job scanning flow
+2. Improve Skyvern templates (test with real FINN.no pages)
+3. Add AI job relevance analysis (Phase 4)
+4. Cover letter generation
+5. Application automation
+
+### 🚨 IMPORTANT: First Thing to Do
+**Ask user about current status BEFORE continuing:**
+- Is jobs table created? ✅ / ❌
+- Is Worker running? ✅ / ❌
+- Any errors or issues?
+
+**Then proceed based on user's answer!**
 
 ---
 
@@ -396,24 +456,72 @@ curl http://localhost:8000/api/v1/health
 
 ---
 
+## ⚡ Quick Start Checklist for New Session
+
+**Copy-paste this checklist in your first message:**
+
+```
+[ ] git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+[ ] Read SESSION_CONTEXT.md
+[ ] Read QUICK_START.md
+[ ] Ask user for SUPABASE_SERVICE_KEY (if needed)
+[ ] Ask user: "Ти вже створив jobs table в Supabase?"
+[ ] Ask user: "Worker працює зараз на твоєму ПК?"
+[ ] Based on answers → proceed with next task
+```
+
+---
+
+## 💬 Example First Message (для нової сесії)
+
+**Скопіюй це і відправ як перше повідомлення:**
+
+```
+Привіт! Я продовжую роботу над JobBot Norway. 👋
+
+Я щойно:
+✅ Оновив репозиторій (git pull)
+✅ Прочитав SESSION_CONTEXT.md
+✅ Зрозумів що ми вже зробили
+
+Перш ніж продовжити, скажи будь ласка:
+
+1. **Таблиця jobs в Supabase:**
+   - Ти вже виконав SQL з database/jobs_table_schema_fixed.sql?
+   - Або треба це зробити зараз?
+
+2. **Worker на локальному ПК:**
+   - Він зараз працює?
+   - Або треба його запустити?
+
+3. **API ключі:**
+   - Якщо потрібен доступ до Supabase для роботи, дай мені SUPABASE_SERVICE_KEY
+
+4. **Є якісь проблеми чи питання?**
+
+Розкажи статус, і я одразу продовжу з потрібного місця! 🚀
+```
+
+---
+
 ## ⚡ Quick Commands
 
 ```bash
-# Check current status
+# Update repository
+git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+
+# Check status
 git status
 git log --oneline -5
 
-# Update to latest
-git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
-
 # Read context
-cat SESSION_CONTEXT.md
-cat QUICK_START.md
+Read SESSION_CONTEXT.md
+Read QUICK_START.md
 
 # Run locally
 cd web-app && npm run dev          # Frontend
 cd backend && uvicorn app.main:app --reload  # Backend
-cd worker && python3 worker.py     # Worker
+cd worker && python3 worker.py     # Worker (on user's PC)
 ```
 
 ---
