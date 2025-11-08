@@ -1,9 +1,29 @@
 # 🚀 Quick Start for New Claude Code Session
 
-## Instant Context Recovery
+## ⚠️ CRITICAL FIRST STEP: Check Your Branch!
 
-**Previous session ended:** Token limit reached (~700k characters)
-**Current status:** All changes committed and pushed ✅
+**You MUST be on:** `claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF`
+
+### Quick Check:
+```bash
+git branch  # Should show * claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+wc -l README.md  # Should be 500+ lines (not 32 or 83!)
+```
+
+### If you're on wrong branch or README is too short:
+```bash
+git fetch origin
+git checkout claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+```
+
+**After switching, README.md will be 500+ lines and these files will appear:**
+- SESSION_CONTEXT.md
+- QUICK_START.md
+- START_HERE_FIRST.md
+- database/
+- web-app/
+- worker/
 
 ---
 
@@ -14,6 +34,9 @@
 Read SESSION_CONTEXT.md
 ```
 Or via web: https://github.com/SmmShaman/jobbot-norway-public/blob/claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF/SESSION_CONTEXT.md
+
+**Previous session ended:** Token limit reached (~700k characters)
+**Current status:** All changes committed and pushed ✅
 
 ---
 
