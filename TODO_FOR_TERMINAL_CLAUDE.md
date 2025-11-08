@@ -1,48 +1,43 @@
 # ⚠️ URGENT TODO for Terminal Claude
 
-## 🎉 ROOT CAUSE FOUND & FIXED!
+## 🔍 NEW DEBUG LOGS ADDED!
 
-✅ **Browser Claude identified the problem:**
-- Skyvern 2.0 API uses `navigation_goal` + `data_extraction_goal` (NOT `prompt`)
-- Field name was `data_extraction_schema` but should be `extracted_information_schema`
-- Cookie banner was blocking content (now handling it!)
+✅ **Browser Claude added detailed polling logs to diagnose why Worker doesn't receive results**
 
-✅ **All templates fixed:**
-- FINN template updated with correct field names + cookie handling
-- NAV template updated
-- DETAIL template updated
-- Timeouts increased to 90 seconds
+**Problem identified:**
+- Skyvern completes tasks successfully
+- But Worker doesn't receive extracted_information
+- New logs will show each polling attempt and response
 
 ---
 
-## 🚀 TEST THE FIX NOW!
+## 🚀 RESTART WORKER WITH NEW LOGS
 
-**Step 1: Pull latest changes**
+**Run this ONE command:**
 ```bash
-cd ~/jobbot-norway-public
-git pull origin claude/jobbot-norway-metadata-011CUuyJhire2DdZRPu76sND
+bash ~/jobbot-norway-public/worker/restart_worker.sh
 ```
 
-**Step 2: Restart Worker**
-```bash
-pkill -f "python.*worker.py"
-cd ~/jobbot-norway-public/worker
-export SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_ROLE_KEY
-nohup python worker.py > worker.log 2>&1 &
+**Then create a NEW task in Dashboard and watch logs!**
+
+**New logs will show:**
+```
+🔄 Starting to poll Skyvern task: tsk_...
+📡 Poll #1 (elapsed: 0s) - GET /api/v1/tasks/tsk_...
+📥 Response status: 200
+🔍 Task status: running
+🔍 Response keys: [...]
+🔍 Has extracted_information: True, Value type: <class 'NoneType'>
+⏳ Skyvern task running: tsk_... (waiting 5s...)
+📡 Poll #2 (elapsed: 5s) - GET /api/v1/tasks/tsk_...
+...
+✅ Skyvern task completed: tsk_...
+📊 Full response (first 1500 chars): {...}
 ```
 
-**Step 3: Create NEW task via Dashboard**
-Use a FINN.no URL like:
-```
-https://www.finn.no/job/search?location=2.20001.22034.20097&published=1
-```
+---
 
-**Step 4: Monitor logs**
-```bash
-tail -f ~/jobbot-norway-public/worker/worker.log
-```
-
-**What to look for:**
+## 🎯 What to look for in logs:
 ```
 🔍 DEBUG: Full Skyvern result keys: [..., 'navigation_goal', 'data_extraction_goal', 'extracted_information_schema', ...]
 🔍 DEBUG: extracted_information type: <class 'dict'>
