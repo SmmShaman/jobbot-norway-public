@@ -13,8 +13,6 @@ import {
   ExternalLink,
   CheckCircle,
   XCircle,
-  Eye,
-  Filter,
   Search,
   Loader2
 } from 'lucide-react';

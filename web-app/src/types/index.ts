@@ -128,7 +128,7 @@ export interface Job {
   recommendation?: 'APPLY' | 'SKIP' | 'REVIEW';
 
   // Processing status
-  status: 'NEW' | 'REVIEWED' | 'RELEVANT' | 'NOT_RELEVANT' | 'APPLIED' | 'REJECTED' | 'ARCHIVED';
+  status: 'NEW' | 'REVIEWED' | 'RELEVANT' | 'NOT_RELEVANT' | 'APPLIED' | 'REJECTED' | 'ARCHIVED' | 'APPROVED';
   is_processed: boolean;
   _skip?: boolean;
   _skip_reason?: string;
