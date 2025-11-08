@@ -366,8 +366,14 @@ class JobBotWorker:
             extracted_data = result.get('extracted_information', {})
             jobs_list = extracted_data.get('jobs', [])
 
+            # DEBUG: Log what Skyvern actually extracted
+            logger.info(f"🔍 DEBUG: Skyvern extracted_information keys: {list(extracted_data.keys())}")
+            logger.info(f"🔍 DEBUG: Full extracted_information: {json.dumps(extracted_data, indent=2, ensure_ascii=False)[:500]}...")
+
             if not jobs_list:
                 logger.warning("⚠️ No jobs found in Skyvern result")
+                logger.warning(f"⚠️ Skyvern task status: {result.get('status')}")
+                logger.warning(f"⚠️ Full Skyvern result: {json.dumps(result, indent=2, ensure_ascii=False)[:1000]}...")
                 self.update_task_status(
                     task_id,
                     'COMPLETED',
