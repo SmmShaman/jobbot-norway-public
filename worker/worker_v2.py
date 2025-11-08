@@ -9,6 +9,7 @@ import time
 import json
 import logging
 import requests
+import re
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -23,6 +24,13 @@ except ImportError:
     print("ERROR: supabase package not installed!")
     print("Install it: pip install supabase")
     sys.exit(1)
+
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    print("WARNING: Playwright not installed. Install with: pip install playwright && playwright install chromium")
 
 # Configure logging
 logging.basicConfig(
@@ -114,24 +122,66 @@ class JobBotWorkerV2:
             logger.error(f"❌ Error updating task: {e}")
 
     def fetch_finn_search_html(self, url: str) -> Optional[str]:
-        """Fetch HTML content from FINN.no search URL"""
+        """Fetch HTML content from FINN.no search URL using Playwright
+
+        FINN.no is a React/Next.js SPA - we need browser automation to render JavaScript
+        """
+        # Fallback to requests if Playwright not available (won't work for FINN.no)
+        if not PLAYWRIGHT_AVAILABLE:
+            logger.warning("⚠️ Playwright not available, using fallback (will likely fail for FINN.no)")
+            return self._fetch_html_fallback(url)
+
+        try:
+            logger.info(f"🌐 Launching browser for: {url[:70]}...")
+
+            with sync_playwright() as p:
+                # Launch Chromium browser
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                )
+                page = context.new_page()
+
+                # Navigate to search page
+                logger.info("📄 Loading page with JavaScript rendering...")
+                page.goto(url, wait_until='networkidle', timeout=30000)
+
+                # Wait for job listings to appear
+                logger.info("⏳ Waiting for job listings...")
+                try:
+                    # Wait for links with finnkode to appear
+                    page.wait_for_selector('a[href*="finnkode"]', timeout=10000)
+                    logger.info("✅ Job listings loaded!")
+                except:
+                    logger.warning("⚠️ No job listings found (page may be empty)")
+
+                # Get rendered HTML
+                html_content = page.content()
+
+                browser.close()
+
+                logger.info(f"✅ HTML fetched: {len(html_content)} characters")
+                return html_content
+
+        except Exception as e:
+            logger.error(f"❌ Error fetching HTML with Playwright: {e}")
+            return None
+
+    def _fetch_html_fallback(self, url: str) -> Optional[str]:
+        """Fallback method using requests (won't work for React SPAs like FINN.no)"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
-
-            logger.info(f"🌐 Fetching HTML from: {url[:70]}...")
             response = requests.get(url, headers=headers, timeout=30)
 
             if response.status_code == 200:
-                logger.info(f"✅ HTML fetched: {len(response.text)} characters")
                 return response.text
             else:
-                logger.error(f"❌ HTTP {response.status_code} from FINN.no")
+                logger.error(f"❌ HTTP {response.status_code}")
                 return None
-
         except Exception as e:
-            logger.error(f"❌ Error fetching HTML: {e}")
+            logger.error(f"❌ Error: {e}")
             return None
 
     def extract_and_create_jobs(self, html_content: str, user_id: str, scan_task_id: str) -> List[Dict]:

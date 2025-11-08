@@ -6,5 +6,8 @@ supabase==2.7.4
 # HTTP requests
 requests==2.31.0
 
+# Browser automation (required for FINN.no React/SPA scraping)
+playwright==1.40.0
+
 # Environment variables
 python-dotenv==1.0.0
