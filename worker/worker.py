@@ -362,13 +362,27 @@ class JobBotWorker:
             if not result:
                 raise Exception("Skyvern returned no results")
 
+            # DEBUG: Log FULL Skyvern response first
+            logger.info(f"🔍 DEBUG: Full Skyvern result keys: {list(result.keys())}")
+            logger.info(f"🔍 DEBUG: Skyvern result (first 2000 chars): {json.dumps(result, indent=2, ensure_ascii=False)[:2000]}...")
+
             # Extract jobs from result
             extracted_data = result.get('extracted_information', {})
-            jobs_list = extracted_data.get('jobs', [])
+
+            # Safety check: extracted_data might be None
+            if extracted_data is None:
+                logger.error("❌ Skyvern returned extracted_information = None")
+                extracted_data = {}
+
+            jobs_list = extracted_data.get('jobs', []) if isinstance(extracted_data, dict) else []
 
             # DEBUG: Log what Skyvern actually extracted
-            logger.info(f"🔍 DEBUG: Skyvern extracted_information keys: {list(extracted_data.keys())}")
-            logger.info(f"🔍 DEBUG: Full extracted_information: {json.dumps(extracted_data, indent=2, ensure_ascii=False)[:500]}...")
+            logger.info(f"🔍 DEBUG: extracted_information type: {type(extracted_data)}")
+            if isinstance(extracted_data, dict):
+                logger.info(f"🔍 DEBUG: extracted_information keys: {list(extracted_data.keys())}")
+                logger.info(f"🔍 DEBUG: Full extracted_information: {json.dumps(extracted_data, indent=2, ensure_ascii=False)[:500]}...")
+            else:
+                logger.warning(f"⚠️ extracted_information is not a dict, it's: {extracted_data}")
 
             if not jobs_list:
                 logger.warning("⚠️ No jobs found in Skyvern result")
