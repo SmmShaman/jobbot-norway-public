@@ -16,7 +16,24 @@ git checkout claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
 git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
 ```
 
-### Step 2: Read Context Files
+### Step 2: Get API Keys from User
+**⚠️ You DON'T have access to secrets! Ask user for:**
+```
+"Щоб продовжити роботу, мені потрібні API ключі. Будь ласка, надай:
+
+1. SUPABASE_SERVICE_KEY (з https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/settings/api)
+   - Копіювати 'service_role' key
+
+2. Для Google Cloud (якщо потрібен деплой):
+   - Або gcp-key.json файл
+   - Або виконай: gcloud auth login (якщо gcloud вже налаштований)
+
+3. Netlify автоматично деплоїться з git push ✅ (не потрібно)"
+```
+
+**ВАЖЛИВО:** Ключі треба просити щоразу в новій сесії - вони НЕ зберігаються між сесіями!
+
+### Step 3: Read Context Files
 After updating, these files will appear:
 ```bash
 # Quick overview (read first!)
@@ -29,7 +46,41 @@ Read SESSION_CONTEXT.md
 Read CLAUDE.md
 ```
 
-### Step 3: Continue Work
+### Step 4: Understand Hybrid Architecture
+**🔑 Критично важливо:**
+
+**Ти (браузерна сесія Claude Code) маєш доступ до:**
+- ✅ GitHub репозиторію
+- ✅ Netlify (через git push - автоматично)
+- ✅ Google Cloud Run (через gcloud CLI, якщо користувач надав ключі)
+- ✅ Supabase (через API з ключами від користувача)
+
+**Ти НЕ маєш доступу до:**
+- ❌ Локального ПК користувача (~/jobbot-norway-public/worker/)
+- ❌ Skyvern (localhost:8000 на ПК користувача)
+- ❌ Docker на ПК користувача
+
+**Для роботи з локальним Worker/Skyvern:**
+Користувач використовує **окрему сесію "Claude Code Terminal"** на своєму ПК:
+```bash
+# На локальному ПК користувач запускає:
+cd ~/jobbot-norway-public
+claude --dangerously-skip-permissions
+
+# Ця локальна сесія може:
+# - Запускати Worker (python3 worker/worker.py)
+# - Налаштовувати Skyvern
+# - Виконувати git pull для оновлення
+```
+
+**Твоя роль (браузерна сесія):**
+- Розробка Frontend/Backend коду
+- Зміни в базі даних (SQL скрипти)
+- Деплой на Netlify (git push)
+- Деплой на Cloud Run (gcloud commands)
+- Інструкції для користувача щодо локального Worker
+
+### Step 5: Continue Work
 Check the TODO list in SESSION_CONTEXT.md for next tasks.
 
 ---
@@ -178,6 +229,62 @@ EOF
 
 ---
 
+### Google Cloud Authentication (для деплою Backend)
+
+**Варіант 1: gcloud CLI (якщо вже налаштований):**
+```bash
+# Перевірити чи є доступ:
+gcloud auth list
+
+# Якщо є активний акаунт - можна деплоїти:
+gcloud run deploy jobbot-backend \
+  --source ./backend \
+  --region us-central1 \
+  --project jobbot-norway-442915
+```
+
+**Варіант 2: Service Account Key (якщо gcloud не налаштований):**
+```bash
+# Попросити користувача надати gcp-key.json:
+"Для деплою на Cloud Run потрібен файл gcp-key.json.
+Будь ласка, надай його або виконай: gcloud auth login"
+
+# Після отримання:
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/gcp-key.json
+gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+```
+
+**Варіант 3: Попросити користувача задеплоїти вручну:**
+```
+"Я підготував зміни в backend/.
+Будь ласка, виконай на своєму ПК:
+
+cd ~/jobbot-norway-public
+git pull
+cd backend
+gcloud run deploy jobbot-backend --source . --region us-central1"
+```
+
+---
+
+### Netlify Deployment (автоматичний!)
+
+**✅ Не потрібні ключі!** Netlify автоматично деплоїться з git push.
+
+**Що відбувається:**
+```bash
+git push origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+→ GitHub webhook → Netlify
+→ Автоматично: npm install → npm run build → deploy
+→ Live: https://jobbot-norway.netlify.app
+```
+
+**Для зміни env vars (якщо потрібно):**
+Попросити користувача зайти в:
+https://app.netlify.com/sites/jobbot-norway/configuration/env
+
+---
+
 ## 🛠️ Development
 
 ### Run Frontend Locally
@@ -195,10 +302,50 @@ uvicorn app.main:app --reload  # http://localhost:8000
 ```
 
 ### Run Worker (on user's PC)
+
+**⚠️ Worker працює ТІЛЬКИ на локальному ПК користувача!**
+
+**Опція 1: Користувач запускає вручну**
 ```bash
 cd ~/jobbot-norway-public/worker
 pip install -r requirements.txt
 python3 worker.py
+```
+
+**Опція 2: Через локальну сесію Claude Code Terminal**
+Користувач може запустити Claude Code локально для автоматизації:
+```bash
+# На локальному ПК:
+cd ~/jobbot-norway-public
+claude --dangerously-skip-permissions
+
+# В локальній сесії Claude може виконувати команди:
+# - Setup Worker
+# - Налаштувати Skyvern
+# - Запустити Docker
+# - Виконати git pull для оновлень
+```
+
+**Приклад інструкцій для локальної сесії Claude:**
+```
+"Виконай setup Worker:
+1. cd worker
+2. pip install -r requirements.txt
+3. Створи .env файл з ключами
+4. Перевір що Skyvern працює: curl http://localhost:8000/api/v1/health
+5. Запусти Worker: python3 worker.py"
+```
+
+**Skyvern + Docker (локально):**
+```bash
+# Перевірити чи працює:
+docker ps | grep skyvern
+
+# Запустити якщо не працює:
+docker-compose up -d skyvern
+
+# Перевірити доступність:
+curl http://localhost:8000/api/v1/health
 ```
 
 ---
