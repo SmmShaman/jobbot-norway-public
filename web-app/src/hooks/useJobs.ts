@@ -60,7 +60,7 @@ export const useApproveJob = () => {
   const { mutate: updateJob } = useUpdateJob();
 
   return (jobId: string) => {
-    updateJob({ jobId, updates: { status: 'APPROVED' } });
+    updateJob({ jobId, updates: { status: 'APPLIED' } });
   };
 };
 
