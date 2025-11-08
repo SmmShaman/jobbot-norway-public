@@ -4,6 +4,37 @@
 
 ---
 
+# ⚠️⚠️⚠️ FOR NEW CLAUDE CODE SESSION - READ THIS FIRST! ⚠️⚠️⚠️
+
+## 🚨 CRITICAL: Update Repository IMMEDIATELY!
+
+**If this README is shorter than 400 lines, you are on an OLD version!**
+
+### DO THIS NOW (before reading anything else):
+
+```bash
+git fetch origin
+git checkout claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+git pull origin claude/add-metadata-master-scheduler-011CUqJXNw4wkoYPis8TAkxF
+```
+
+### Then read README.md again - it should be 500+ lines!
+
+**After updating you will see:**
+- ✅ Complete setup instructions
+- ✅ SESSION_CONTEXT.md with full project history
+- ✅ QUICK_START.md with quick reference
+- ✅ Step-by-step guide what to do first
+- ✅ Example first message to send user
+
+**If you skip git pull, you will:**
+- ❌ Miss critical files (SESSION_CONTEXT.md, QUICK_START.md, database/, web-app/, worker/)
+- ❌ Not know what was already done
+- ❌ Not know what to do next
+- ❌ Waste time working on old code
+
+---
+
 ## ⚠️ FOR NEW CLAUDE CODE SESSION - START HERE!
 
 **IMPORTANT:** If you're continuing work on this project, follow these steps:
