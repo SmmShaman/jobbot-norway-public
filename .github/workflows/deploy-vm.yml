@@ -52,6 +52,49 @@ jobs:
 
           echo "✅ Dependencies updated!"
 
+      - name: 🔧 Setup environment file
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          if [ ! -f ".env" ]; then
+            echo "⚠️ .env file not found! Creating from template..."
+            cp .env.example .env
+            echo ""
+            echo "❌ ERROR: Please configure .env file manually:"
+            echo "   1. Edit: /home/stuard/jobbot-norway-public/worker/.env"
+            echo "   2. Add your SUPABASE_SERVICE_KEY"
+            echo "   3. Re-run deployment"
+            exit 1
+          else
+            echo "✅ .env file exists"
+
+            # Verify required env vars
+            if ! grep -q "SUPABASE_SERVICE_KEY=eyJ" .env; then
+              echo "❌ ERROR: SUPABASE_SERVICE_KEY not configured in .env"
+              echo "   Edit: /home/stuard/jobbot-norway-public/worker/.env"
+              exit 1
+            fi
+
+            echo "✅ Environment configured"
+          fi
+
+      - name: 🎭 Install Playwright browsers
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          if [ -d "venv" ]; then
+            source venv/bin/activate
+          fi
+
+          # Check if chromium is installed
+          if ! playwright show-browsers 2>/dev/null | grep -q chromium; then
+            echo "📥 Installing Playwright Chromium..."
+            playwright install chromium
+            echo "✅ Chromium installed!"
+          else
+            echo "✅ Chromium already installed"
+          fi
+
       - name: 🔍 Check Worker process
         run: |
           echo "🔍 Checking if Worker is running..."
