@@ -1,0 +1,110 @@
+name: 🚀 Auto-Deploy to VM
+
+on:
+  push:
+    branches:
+      - claude/continue-metadata-scheduler-011CUvwSPhPwyxdh3jTQYAYu
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Worker v2 to VM
+    runs-on: self-hosted  # This will run on your VM's GitHub Actions Runner
+
+    steps:
+      - name: 📍 Checkout latest code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📊 Show current status
+        run: |
+          echo "======================================================================"
+          echo "🚀 Auto-Deploy Started"
+          echo "======================================================================"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Commit message: ${{ github.event.head_commit.message }}"
+          echo "======================================================================"
+
+      - name: 🔄 Pull latest changes
+        run: |
+          cd /home/stuard/jobbot-norway-public
+          git fetch origin
+          git pull origin ${{ github.ref_name }}
+          echo "✅ Code updated!"
+
+      - name: 📦 Install/Update Python dependencies
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          # Check if venv exists
+          if [ -d "venv" ]; then
+            echo "📦 Using venv..."
+            source venv/bin/activate
+            pip install -r requirements.txt
+          else
+            echo "📦 Installing globally..."
+            pip3 install -r requirements.txt
+          fi
+
+          echo "✅ Dependencies updated!"
+
+      - name: 🔍 Check Worker process
+        run: |
+          echo "🔍 Checking if Worker is running..."
+
+          WORKER_PID=$(pgrep -f "python3 worker_v2.py" || echo "")
+
+          if [ -n "$WORKER_PID" ]; then
+            echo "✅ Worker is running (PID: $WORKER_PID)"
+          else
+            echo "⚠️ Worker is NOT running"
+          fi
+
+      - name: 🔄 Restart Worker
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          echo "🛑 Stopping old Worker..."
+          pkill -f "python3 worker_v2.py" || echo "No running Worker found"
+
+          sleep 2
+
+          echo "🚀 Starting new Worker..."
+
+          if [ -d "venv" ]; then
+            source venv/bin/activate
+          fi
+
+          nohup python3 worker_v2.py > worker.log 2>&1 &
+
+          NEW_PID=$!
+          echo "✅ Worker started (PID: $NEW_PID)"
+
+          sleep 3
+
+          # Verify it's running
+          if ps -p $NEW_PID > /dev/null; then
+            echo "✅ Worker is alive!"
+            tail -20 worker.log
+          else
+            echo "❌ Worker failed to start!"
+            tail -50 worker.log
+            exit 1
+          fi
+
+      - name: ✅ Deployment Summary
+        run: |
+          echo ""
+          echo "======================================================================"
+          echo "✅ DEPLOYMENT COMPLETE!"
+          echo "======================================================================"
+          echo "📊 Worker Status:"
+          ps aux | grep -i '[p]ython.*worker' || echo "⚠️ Worker not found"
+          echo ""
+          echo "📄 Last 10 log lines:"
+          tail -10 /home/stuard/jobbot-norway-public/worker/worker.log
+          echo "======================================================================"
