@@ -253,17 +253,22 @@ export const db = {
     return data;
   },
 
-  // Monitoring logs
+  // Monitoring logs - Show scan tasks as recent activity
   getMonitoringLogs: async (userId: string, limit = 10) => {
     const { data, error } = await supabase
-      .from('monitoring_logs')
-      .select('*')
+      .from('scan_tasks')
+      .select('id, scan_type, status, jobs_found, jobs_saved, started_at, created_at')
       .eq('user_id', userId)
-      .order('started_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
-    return data;
+
+    // Transform to match monitoring_logs format
+    return data?.map(task => ({
+      ...task,
+      jobs_relevant: task.jobs_saved || 0 // Approximate relevant as saved
+    }));
   },
 
   createMonitoringLog: async (log: any) => {
