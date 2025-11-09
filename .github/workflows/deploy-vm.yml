@@ -53,30 +53,25 @@ jobs:
           echo "✅ Dependencies updated!"
 
       - name: 🔧 Setup environment file
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
           cd /home/stuard/jobbot-norway-public/worker
 
-          if [ ! -f ".env" ]; then
-            echo "⚠️ .env file not found! Creating from template..."
-            cp .env.example .env
-            echo ""
-            echo "❌ ERROR: Please configure .env file manually:"
-            echo "   1. Edit: /home/stuard/jobbot-norway-public/worker/.env"
-            echo "   2. Add your SUPABASE_SERVICE_KEY"
-            echo "   3. Re-run deployment"
+          if [ -z "$SUPABASE_SERVICE_KEY" ]; then
+            echo "❌ ERROR: SUPABASE_SERVICE_KEY secret not configured!"
+            echo "   Add it in GitHub: Settings → Secrets and variables → Actions"
             exit 1
-          else
-            echo "✅ .env file exists"
-
-            # Verify required env vars
-            if ! grep -q "SUPABASE_SERVICE_KEY=eyJ" .env; then
-              echo "❌ ERROR: SUPABASE_SERVICE_KEY not configured in .env"
-              echo "   Edit: /home/stuard/jobbot-norway-public/worker/.env"
-              exit 1
-            fi
-
-            echo "✅ Environment configured"
           fi
+
+          echo "📝 Creating .env file..."
+          cat > .env << EOF
+SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co
+SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY
+SKYVERN_API_URL=http://localhost:8000
+EOF
+
+          echo "✅ Environment configured"
 
       - name: 🎭 Install Playwright browsers
         run: |
