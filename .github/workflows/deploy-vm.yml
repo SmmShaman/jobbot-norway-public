@@ -65,11 +65,11 @@ jobs:
           fi
 
           echo "📝 Creating .env file..."
-          cat > .env << EOF
-SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co
-SUPABASE_SERVICE_KEY=$SUPABASE_SERVICE_KEY
-SKYVERN_API_URL=http://localhost:8000
-EOF
+          {
+            echo "SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co"
+            echo "SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}"
+            echo "SKYVERN_API_URL=http://localhost:8000"
+          } > .env
 
           echo "✅ Environment configured"
 
