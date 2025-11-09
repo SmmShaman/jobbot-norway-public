@@ -209,6 +209,7 @@ class JobBotWorkerV2:
                 logger.warning("❌ No '/job/' pattern found in HTML at all!")
 
             # Call Supabase function to extract links and create jobs
+            logger.info(f"🔄 Calling create_jobs_from_finn_links with {len(html_content)} chars of HTML")
             result = self.supabase.rpc(
                 'create_jobs_from_finn_links',
                 {
@@ -218,11 +219,14 @@ class JobBotWorkerV2:
                 }
             ).execute()
 
+            logger.info(f"📊 Function result: data={result.data}, count={result.count if hasattr(result, 'count') else 'N/A'}")
+
             if result.data:
                 logger.info(f"✅ Created/updated {len(result.data)} job entries")
                 return result.data
             else:
                 logger.warning("⚠️ No job links extracted from HTML")
+                logger.warning(f"⚠️ Result object: {result}")
                 return []
 
         except Exception as e:
