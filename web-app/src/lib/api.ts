@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { supabase } from './supabase';
 import type {
   ApiResponse,
   ScanJobsRequest,
@@ -27,10 +28,58 @@ api.interceptors.request.use((config) => {
 });
 
 export const jobsApi = {
-  // Trigger job scanning
+  // Trigger job scanning - Create scan task directly in Supabase
   scanJobs: async (request: ScanJobsRequest): Promise<ApiResponse<any>> => {
-    const { data } = await api.post('/api/scan-jobs', request);
-    return data;
+    try {
+      // Get user settings to fetch search URLs
+      const { data: settings, error: settingsError } = await supabase
+        .from('user_settings')
+        .select('finn_search_urls, nav_search_urls')
+        .eq('user_id', request.user_id)
+        .single();
+
+      if (settingsError) throw settingsError;
+
+      const searchUrls = settings?.finn_search_urls || [];
+
+      if (searchUrls.length === 0) {
+        throw new Error('No search URLs configured. Please add search URLs in Settings.');
+      }
+
+      // Create scan task for each URL with PENDING status
+      const tasks = await Promise.all(
+        searchUrls.map(async (url: string) => {
+          const { data, error } = await supabase
+            .from('scan_tasks')
+            .insert({
+              user_id: request.user_id,
+              url: url,
+              source: 'FINN',
+              scan_type: request.scan_type || 'MANUAL',
+              status: 'PENDING', // Worker looks for PENDING status
+              max_retries: 3,
+              retry_count: 0
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          return data;
+        })
+      );
+
+      return {
+        success: true,
+        data: tasks,
+        message: `Created ${tasks.length} scan task(s). Worker will process them shortly.`
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to create scan tasks'
+      };
+    }
   },
 
   // Analyze single job with AI
