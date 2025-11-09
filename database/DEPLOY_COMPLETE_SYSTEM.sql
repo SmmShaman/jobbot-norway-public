@@ -398,7 +398,7 @@ DECLARE
 BEGIN
     RAISE NOTICE '';
     RAISE NOTICE '========================================';
-    RAISE NOTICE '🔍 VERIFYING DEPLOYMENT';
+    RAISE NOTICE 'VERIFYING DEPLOYMENT';
     RAISE NOTICE '========================================';
     RAISE NOTICE '';
 
@@ -408,33 +408,33 @@ BEGIN
     WHERE table_schema = 'public'
     AND table_name IN ('profiles', 'user_settings', 'scan_tasks', 'jobs');
 
-    RAISE NOTICE '✅ Tables created: % of 4', table_count;
+    RAISE NOTICE 'Tables created: % of 4', table_count;
 
     -- Test function
     RAISE NOTICE '';
-    RAISE NOTICE '🧪 Testing extract_finn_job_links function:';
+    RAISE NOTICE 'Testing extract_finn_job_links function:';
     FOR test_result IN
         SELECT * FROM extract_finn_job_links('<a href="https://www.finn.no/job/ad/123456789">Test Job</a>')
     LOOP
-        RAISE NOTICE '  ✅ Found: % (finnkode: %)', test_result.url, test_result.finnkode;
+        RAISE NOTICE '  Found: % (finnkode: %)', test_result.url, test_result.finnkode;
     END LOOP;
 
     RAISE NOTICE '';
     RAISE NOTICE '========================================';
-    RAISE NOTICE '✅ DEPLOYMENT COMPLETE';
+    RAISE NOTICE 'DEPLOYMENT COMPLETE';
     RAISE NOTICE '========================================';
     RAISE NOTICE '';
     RAISE NOTICE 'Created:';
-    RAISE NOTICE '  ✅ profiles table';
-    RAISE NOTICE '  ✅ user_settings table';
-    RAISE NOTICE '  ✅ scan_tasks table';
-    RAISE NOTICE '  ✅ jobs table (with finnkode column)';
-    RAISE NOTICE '  ✅ extract_finn_job_links() function';
-    RAISE NOTICE '  ✅ create_jobs_from_finn_links() function';
-    RAISE NOTICE '  ✅ get_pending_skyvern_jobs() function';
+    RAISE NOTICE '  - profiles table';
+    RAISE NOTICE '  - user_settings table';
+    RAISE NOTICE '  - scan_tasks table';
+    RAISE NOTICE '  - jobs table (with finnkode column)';
+    RAISE NOTICE '  - extract_finn_job_links() function';
+    RAISE NOTICE '  - create_jobs_from_finn_links() function';
+    RAISE NOTICE '  - get_pending_skyvern_jobs() function';
     RAISE NOTICE '';
-    RAISE NOTICE '🎯 Next steps:';
-    RAISE NOTICE '  1. Go to Dashboard → Settings';
+    RAISE NOTICE 'Next steps:';
+    RAISE NOTICE '  1. Go to Dashboard -> Settings';
     RAISE NOTICE '  2. Add a FINN.no search URL';
     RAISE NOTICE '  3. Click "Scan Now"';
     RAISE NOTICE '  4. Wait 10-30 seconds';
