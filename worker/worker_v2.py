@@ -193,6 +193,18 @@ class JobBotWorkerV2:
         try:
             logger.info("🔍 Extracting job links from HTML...")
 
+            # DEBUG: Check for job links in HTML
+            if '/job/ad/' in html_content:
+                logger.info("✅ Found '/job/ad/' pattern in HTML")
+            elif '/job/' in html_content:
+                logger.info("⚠️ Found '/job/' but not '/job/ad/' in HTML")
+            else:
+                logger.warning("❌ No '/job/' pattern found in HTML at all!")
+
+            # DEBUG: Sample
+            sample = html_content[html_content.find('href='):html_content.find('href=')+200] if 'href=' in html_content else "No href found"
+            logger.info(f"📄 Sample href: {sample}")
+
             # Call Supabase function to extract links and create jobs
             result = self.supabase.rpc(
                 'create_jobs_from_finn_links',
