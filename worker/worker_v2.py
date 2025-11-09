@@ -153,8 +153,8 @@ class JobBotWorkerV2:
                 # Wait for job listings to appear
                 logger.info("⏳ Waiting for job listings...")
                 try:
-                    # Wait for links with finnkode to appear
-                    page.wait_for_selector('a[href*="finnkode"]', timeout=10000)
+                    # Wait for job links to appear (new format: /job/ad/xxxxx or old format: finnkode=xxxxx)
+                    page.wait_for_selector('a[href*="/job/"]', timeout=15000)
                     logger.info("✅ Job listings loaded!")
                 except:
                     logger.warning("⚠️ No job listings found (page may be empty)")
