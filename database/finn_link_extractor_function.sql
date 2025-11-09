@@ -1,6 +1,7 @@
 -- ============================================================
 -- FINN.no Link Extraction Function
 -- Extracts individual job URLs from FINN.no search results HTML
+-- Updated to support new FINN.no URL format: /job/ad/123456789
 -- ============================================================
 
 -- Function to extract FINN.no job links from HTML content
@@ -11,33 +12,51 @@ RETURNS TABLE (
     title TEXT
 ) AS $$
 DECLARE
-    pattern TEXT := 'href="(https?://[^"]*finnkode=\d+)"';
-    matches TEXT[];
-    match_url TEXT;
-    code_match TEXT;
+    match RECORD;
+    full_url TEXT;
+    job_id TEXT;
 BEGIN
-    -- Find all URLs with finnkode in the HTML
-    FOR match_url IN
-        SELECT regexp_matches[1]
-        FROM regexp_matches(html_content, pattern, 'gi') AS regexp_matches
+    -- Pattern 1: Absolute URL with new format (https://www.finn.no/job/ad/436409474)
+    FOR match IN
+        SELECT
+            regexp_matches[1] as matched_url,
+            regexp_matches[2] as id
+        FROM regexp_matches(html_content, 'href="(https://www\.finn\.no/job/[^"]*?(\d{6,}))"', 'gi') AS regexp_matches
     LOOP
-        -- Ensure URL is absolute
-        IF match_url NOT LIKE 'http%' THEN
-            match_url := 'https://www.finn.no' ||
-                        CASE
-                            WHEN match_url LIKE '/%' THEN match_url
-                            ELSE '/' || match_url
-                        END;
+        job_id := match.id;
+        full_url := match.matched_url;
+
+        IF job_id IS NOT NULL THEN
+            RETURN QUERY SELECT full_url, job_id, 'Job ' || job_id;
         END IF;
+    END LOOP;
 
-        -- Extract finnkode from URL
-        code_match := substring(match_url FROM 'finnkode=(\d+)');
+    -- Pattern 2: Relative URL (/job/ad/436409474)
+    FOR match IN
+        SELECT
+            regexp_matches[1] as path,
+            regexp_matches[2] as id
+        FROM regexp_matches(html_content, 'href="(/job/[^"]*?(\d{6,}))"', 'gi') AS regexp_matches
+    LOOP
+        job_id := match.id;
+        full_url := 'https://www.finn.no' || match.path;
 
-        IF code_match IS NOT NULL THEN
-            RETURN QUERY SELECT
-                match_url,
-                code_match,
-                'Job ' || code_match;
+        IF job_id IS NOT NULL THEN
+            RETURN QUERY SELECT full_url, job_id, 'Job ' || job_id;
+        END IF;
+    END LOOP;
+
+    -- Pattern 3: Old format with finnkode parameter (fallback)
+    FOR match IN
+        SELECT
+            regexp_matches[1] as matched_url
+        FROM regexp_matches(html_content, 'href="(https?://[^"]*finnkode=(\d+))"', 'gi') AS regexp_matches
+    LOOP
+        full_url := match.matched_url;
+        job_id := substring(full_url FROM 'finnkode=(\d+)');
+
+        IF job_id IS NOT NULL THEN
+            RETURN QUERY SELECT full_url, job_id, 'Job ' || job_id;
         END IF;
     END LOOP;
 
@@ -85,7 +104,7 @@ BEGIN
                 v_link.url,
                 v_link.finnkode,
                 v_link.title,
-                'FINN Company', -- Placeholder, will be updated by Skyvern
+                'FINN.no', -- Updated to match NOT NULL constraint
                 'FINN',
                 'NEW',
                 'PENDING',
@@ -147,6 +166,6 @@ $$ LANGUAGE plpgsql;
 -- Comments
 -- ============================================================
 
-COMMENT ON FUNCTION extract_finn_job_links IS 'Extracts individual job URLs with finnkode from FINN.no search results HTML';
+COMMENT ON FUNCTION extract_finn_job_links IS 'Extracts individual job URLs with finnkode from FINN.no search results HTML - supports new /job/ad/ID format';
 COMMENT ON FUNCTION create_jobs_from_finn_links IS 'Creates job entries from extracted FINN.no links, handling duplicates automatically';
 COMMENT ON FUNCTION get_pending_skyvern_jobs IS 'Retrieves jobs that are pending Skyvern content extraction';
