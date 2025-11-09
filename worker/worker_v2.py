@@ -18,6 +18,10 @@ import uuid
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 try:
     from supabase import create_client, Client
 except ImportError:
