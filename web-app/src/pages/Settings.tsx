@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile } from '@/hooks/useSettings';
-import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2 } from 'lucide-react';
+import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile, useAnalyzeResumes } from '@/hooks/useSettings';
+import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles } from 'lucide-react';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -11,6 +11,7 @@ export default function Settings() {
   const updateProfile = useUpdateProfile();
   const updateSettings = useUpdateSettings();
   const uploadResume = useUploadResume();
+  const analyzeResumes = useAnalyzeResumes();
 
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
@@ -323,9 +324,11 @@ export default function Settings() {
           <div className="space-y-4">
             <h2 className="text-xl font-semibold mb-4">Resume Upload & AI Analysis</h2>
 
+            {/* Upload Section */}
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
               <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-600 mb-4">Upload your resume (PDF, max 10MB)</p>
+              <p className="text-gray-600 mb-2">Upload your resumes (PDF, max 10MB each)</p>
+              <p className="text-sm text-gray-500 mb-4">You can upload up to 5 resumes</p>
 
               <input
                 type="file"
@@ -333,55 +336,103 @@ export default function Settings() {
                 onChange={handleResumeUpload}
                 className="hidden"
                 id="resume-upload"
-                disabled={isSaving}
+                disabled={isSaving || (settings?.resume_files && settings.resume_files.length >= 5)}
               />
               <label
                 htmlFor="resume-upload"
                 className={`inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 cursor-pointer ${
-                  isSaving ? 'opacity-50 cursor-not-allowed' : ''
+                  isSaving || (settings?.resume_files && settings.resume_files.length >= 5) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 <Upload className="w-4 h-4" />
-                {isSaving ? 'Analyzing...' : 'Choose File'}
+                {isSaving ? 'Uploading...' : 'Choose File'}
               </label>
 
-              {settings?.resume_storage_path && (
-                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-800 font-medium flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5" />
-                    Resume uploaded
-                  </p>
-                  <p className="text-sm text-green-600 mt-1">
-                    {settings.resume_storage_path.split('/').pop()}
-                  </p>
-                  <div className="mt-3 flex gap-2 justify-center">
-                    <a
-                      href={`https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm bg-white border border-green-300 text-green-700 px-3 py-1 rounded hover:bg-green-50"
-                    >
-                      📄 Download PDF
-                    </a>
-                    <button
-                      onClick={async () => {
-                        const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`;
-                        const response = await fetch(url);
-                        const blob = await response.blob();
-                        const text = await blob.text();
-                        const win = window.open('', '_blank');
-                        if (win) {
-                          win.document.write('<pre style="white-space: pre-wrap; font-family: monospace; padding: 20px;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>');
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 text-sm bg-white border border-green-300 text-green-700 px-3 py-1 rounded hover:bg-green-50"
-                    >
-                      📝 View Extracted Text
-                    </button>
-                  </div>
-                </div>
+              {settings?.resume_files && settings.resume_files.length >= 5 && (
+                <p className="text-sm text-orange-600 mt-2">Maximum 5 resumes reached</p>
               )}
             </div>
+
+            {/* Uploaded Resumes List */}
+            {settings?.resume_files && settings.resume_files.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary-600" />
+                  Uploaded Resumes ({settings.resume_files.length}/5)
+                </h3>
+
+                <div className="space-y-2">
+                  {settings.resume_files.map((filePath, index) => (
+                    <div key={filePath} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">
+                          #{index + 1}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {filePath.split('/').pop()}
+                          </p>
+                          <p className="text-xs text-gray-500">{filePath}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <a
+                          href={`https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${filePath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs bg-white border border-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                        >
+                          📄 PDF
+                        </a>
+                        <button
+                          onClick={async () => {
+                            const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${filePath}`;
+                            const response = await fetch(url);
+                            const blob = await response.blob();
+                            const text = await blob.text();
+                            const win = window.open('', '_blank');
+                            if (win) {
+                              win.document.write('<html><head><title>Extracted Text</title></head><body><pre style="white-space: pre-wrap; font-family: monospace; padding: 20px; line-height: 1.5;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></body></html>');
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Текст
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Analyze Button */}
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    setIsSaving(true);
+                    try {
+                      await analyzeResumes.mutateAsync({ userId: user.id });
+                      await refetchAIProfile();
+                      alert('✅ Resumes analyzed successfully!');
+                    } catch (error: any) {
+                      alert('❌ Analysis error: ' + error.message);
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="w-full mt-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  {isSaving ? 'Аналізую резюме...' : `Аналізувати всі ${settings.resume_files.length} резюме з AI`}
+                </button>
+
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  🤖 AI об'єднає інформацію з усіх резюме в один профіль
+                </p>
+              </div>
+            )}
 
             {/* AI Prompt Editor */}
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">

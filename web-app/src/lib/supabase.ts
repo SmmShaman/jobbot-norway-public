@@ -74,36 +74,84 @@ export const storage = {
     console.log('Uploaded resume:', fileName);
     console.log('Public URL:', publicUrl);
 
-    // 3. Call PDF Parser Edge Function
+    // 3. Get current resume list from user_settings
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('resume_files')
+      .eq('user_id', userId)
+      .single();
+
+    const currentFiles = settings?.resume_files || [];
+
+    // Add new file if not already in list (max 5 files)
+    if (!currentFiles.includes(fileName) && currentFiles.length < 5) {
+      currentFiles.push(fileName);
+    }
+
+    // 4. Update user_settings with resume files list
+    await supabase
+      .from('user_settings')
+      .update({
+        resume_storage_path: fileName, // Keep for backward compatibility
+        resume_files: currentFiles
+      })
+      .eq('user_id', userId);
+
+    console.log('Resume added to list. Total files:', currentFiles.length);
+
+    return {
+      ...data,
+      fileName,
+      publicUrl,
+      totalResumes: currentFiles.length
+    };
+  },
+
+  // NEW: Analyze all uploaded resumes with AI
+  analyzeResumes: async (userId: string) => {
+    // Get all resume files
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('resume_files')
+      .eq('user_id', userId)
+      .single();
+
+    const resumeFiles = settings?.resume_files || [];
+
+    if (resumeFiles.length === 0) {
+      throw new Error('No resumes uploaded');
+    }
+
+    // Get public URLs for all files
+    const resumeUrls = resumeFiles.map(fileName => {
+      const { data } = supabase.storage.from('resumes').getPublicUrl(fileName);
+      return data.publicUrl;
+    });
+
+    console.log(`Analyzing ${resumeFiles.length} resumes...`);
+
+    // Call PDF Parser Edge Function with ALL resumes
     const { data: parseResult, error: parseError } = await supabase.functions.invoke('pdf-parser', {
       body: {
-        user_id: userId,  // Edge Function expects user_id (underscore)
-        file_url: publicUrl,  // Edge Function expects file_url (underscore)
-        storagePath: fileName,
+        user_id: userId,
+        resumeUrls: resumeUrls,  // Multiple URLs
+        storagePaths: resumeFiles,
         currentUser: userId,
       },
     });
 
     if (parseError) {
       console.error('PDF parsing failed:', parseError);
-      console.error('Parse error details:', JSON.stringify(parseError, null, 2));
-      throw new Error('Failed to parse resume: ' + (parseError.message || JSON.stringify(parseError)));
+      throw new Error('Failed to parse resumes: ' + (parseError.message || JSON.stringify(parseError)));
     }
 
     if (!parseResult || !parseResult.success) {
       console.error('Parse result failed:', parseResult);
-      throw new Error('PDF parsing failed: ' + (parseResult?.error || 'Unknown error'));
+      throw new Error('Resume analysis failed: ' + (parseResult?.error || 'Unknown error'));
     }
 
-    console.log('Resume parsed successfully:', parseResult);
-
-    // 4. Update user_settings with resume path
-    await supabase
-      .from('user_settings')
-      .update({ resume_storage_path: fileName })
-      .eq('user_id', userId);
-
-    return { ...data, parseResult };
+    console.log('Resumes analyzed successfully:', parseResult);
+    return parseResult;
   },
 
   getResumeUrl: async (path: string) => {

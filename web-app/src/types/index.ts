@@ -21,6 +21,7 @@ export interface UserSettings {
   exclude_keywords: string[];
   preferred_locations: string[];
   resume_storage_path?: string;
+  resume_files?: string[]; // List of uploaded resume file paths (max 5)
   unified_profile?: UnifiedProfile;
   skills: string[];
   experience_years: number;

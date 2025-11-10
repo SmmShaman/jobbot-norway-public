@@ -64,3 +64,19 @@ export const useAIParsedProfile = (userId: string) => {
     enabled: !!userId,
   });
 };
+
+// Analyze all uploaded resumes with AI
+export const useAnalyzeResumes = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ userId }: { userId: string }) => {
+      const result = await storage.analyzeResumes(userId);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['aiProfile', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['settings', variables.userId] });
+    },
+  });
+};
