@@ -65,9 +65,14 @@ export const storage = {
     if (error) throw error;
 
     // 2. Get public URL
-    const { data: { publicUrl } } = supabase.storage
+    const { data: urlData } = supabase.storage
       .from('resumes')
       .getPublicUrl(fileName);
+
+    const publicUrl = urlData.publicUrl;
+
+    console.log('Uploaded resume:', fileName);
+    console.log('Public URL:', publicUrl);
 
     // 3. Call PDF Parser Edge Function
     const { data: parseResult, error: parseError } = await supabase.functions.invoke('pdf-parser', {
@@ -75,13 +80,22 @@ export const storage = {
         userId,
         resumeUrl: publicUrl,
         storagePath: fileName,
+        currentUser: userId,
       },
     });
 
     if (parseError) {
       console.error('PDF parsing failed:', parseError);
-      throw new Error('Failed to parse resume: ' + parseError.message);
+      console.error('Parse error details:', JSON.stringify(parseError, null, 2));
+      throw new Error('Failed to parse resume: ' + (parseError.message || JSON.stringify(parseError)));
     }
+
+    if (!parseResult || !parseResult.success) {
+      console.error('Parse result failed:', parseResult);
+      throw new Error('PDF parsing failed: ' + (parseResult?.error || 'Unknown error'));
+    }
+
+    console.log('Resume parsed successfully:', parseResult);
 
     // 4. Update user_settings with resume path
     await supabase
