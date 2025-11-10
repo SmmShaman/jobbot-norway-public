@@ -80,7 +80,12 @@ VALIDATION AND COMPLETION:
 38) VERIFY all careerStats fields are populated with realistic data
 `
 
-async function parseMultipleResumesWithAI(resumes: Array<{ content: string; filename: string }>, currentUser: string): Promise<any> {
+async function parseMultipleResumesWithAI(
+  resumes: Array<{ content: string; filename: string }>,
+  currentUser: string,
+  customSystemPrompt?: string,
+  customUserPromptPrefix?: string
+): Promise<any> {
   const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')!
   const azureApiKey = Deno.env.get('AZURE_OPENAI_API_KEY')!
   const deploymentName = Deno.env.get('AZURE_OPENAI_DEPLOYMENT')!
@@ -97,16 +102,22 @@ ${resume.content}
   console.log(`Processing ${resumes.length} files for ${currentUser}`)
   console.log(`Total input length: ${detailedResumeText.length} chars`)
 
-  const userPrompt = `TASK: Create a MAXIMALLY COMPLETE professional JSON profile for ${currentUser} for Norwegian job applications.
+  // Use custom prompt prefix if provided, otherwise use default
+  const userPromptPrefix = customUserPromptPrefix || `Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
 
-${ENHANCED_RULES}
-
-CONTEXT: This profile will be used for automated job applications in Norway, so ensure:
+This profile will be used for automated job applications in Norway, so ensure:
 - Phone numbers follow Norwegian format (+47 XXX XX XXX)
 - Include Norwegian language skills (minimum B1 level)
 - Address should be Norwegian city unless clearly stated otherwise
 - Industries should include relevant Norwegian market sectors
 - All technical skills should be comprehensively categorized
+- Combine ALL information from ALL resumes into ONE comprehensive profile`
+
+  const userPrompt = `TASK: Create a MAXIMALLY COMPLETE professional JSON profile for ${currentUser} for Norwegian job applications.
+
+${userPromptPrefix}
+
+${ENHANCED_RULES}
 
 INPUT DATA - ${resumes.length} RESUME FILES:
 ${detailedResumeText}
@@ -184,6 +195,12 @@ GENERATE COMPLETE JSON PROFILE (NO CODE FENCES):
 
 CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combine information from ALL ${resumes.length} resumes.`
 
+  // Use custom system prompt if provided, otherwise use default
+  const systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
+
+  console.log('System prompt length:', systemPrompt.length, 'chars')
+  console.log('User prompt length:', userPrompt.length, 'chars')
+
   const response = await fetch(
     `${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`,
     {
@@ -194,7 +211,7 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
       },
       body: JSON.stringify({
         messages: [
-          { role: 'system', content: ENHANCED_PROMPT_SYSTEM },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.3,
@@ -284,6 +301,21 @@ serve(async (req) => {
 
     console.log(`Parsing ${urls.length} resume(s) for user: ${finalUserId}`)
 
+    // Fetch user settings to get custom AI prompts
+    const { data: userSettings } = await supabaseClient
+      .from('user_settings')
+      .select('custom_system_prompt, custom_user_prompt')
+      .eq('user_id', finalUserId)
+      .single()
+
+    const customSystemPrompt = userSettings?.custom_system_prompt
+    const customUserPrompt = userSettings?.custom_user_prompt
+
+    console.log('Using custom prompts:', {
+      hasCustomSystem: !!customSystemPrompt,
+      hasCustomUser: !!customUserPrompt
+    })
+
     // Extract text from all PDFs
     const resumes = await Promise.all(
       urls.map(async (url, index) => ({
@@ -293,7 +325,12 @@ serve(async (req) => {
     )
 
     // Parse with Azure OpenAI (combine all resumes)
-    const parsedProfile = await parseMultipleResumesWithAI(resumes, finalCurrentUser)
+    const parsedProfile = await parseMultipleResumesWithAI(
+      resumes,
+      finalCurrentUser,
+      customSystemPrompt,
+      customUserPrompt
+    )
 
     // Map to database schema
     const profileData = {

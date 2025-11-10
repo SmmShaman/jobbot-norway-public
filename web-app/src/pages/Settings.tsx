@@ -77,6 +77,21 @@ export default function Settings() {
     telegram_enabled: false,
   });
 
+  // AI Prompt settings state
+  const [aiPromptSettings, setAiPromptSettings] = useState({
+    custom_system_prompt: '',
+    custom_user_prompt: '',
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setAiPromptSettings({
+        custom_system_prompt: settings.custom_system_prompt || '',
+        custom_user_prompt: settings.custom_user_prompt || '',
+      });
+    }
+  }, [settings]);
+
   useEffect(() => {
     if (settings) {
       setTelegramSettings({
@@ -368,29 +383,39 @@ export default function Settings() {
               )}
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 text-sm mb-3">
-                <strong>Info:</strong> Your resume will be automatically analyzed by AI (Azure OpenAI GPT-4) to extract
-                skills, experience, and qualifications. This helps match you with relevant jobs.
+            {/* AI Prompt Editor */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-purple-900 mb-3">🤖 AI Prompt Customization</h3>
+              <p className="text-purple-800 text-sm mb-4">
+                <strong>Info:</strong> Customize the AI prompt used to analyze your resume. These prompts are sent to Azure OpenAI GPT-4.
               </p>
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm font-medium text-blue-900 hover:text-blue-700">
-                  📋 View AI Analysis Prompt
-                </summary>
-                <div className="mt-3 p-3 bg-white rounded border border-blue-200 text-xs text-gray-700 max-h-64 overflow-y-auto">
-                  <pre className="whitespace-pre-wrap font-mono">{`SYSTEM PROMPT:
-You are an EXPERT HR Data Analyst specializing in creating COMPLETE, DETAILED professional profiles for Norwegian job applications.
+
+              <div className="space-y-4">
+                {/* System Prompt */}
+                <div>
+                  <label className="block text-sm font-medium text-purple-900 mb-2">
+                    System Prompt (AI Role & Instructions)
+                  </label>
+                  <textarea
+                    value={aiPromptSettings.custom_system_prompt || `You are an EXPERT HR Data Analyst specializing in creating COMPLETE, DETAILED professional profiles for Norwegian job applications.
 
 Your mission: Extract EVERY possible detail from resumes and CREATE A FULLY POPULATED profile that leaves NO FIELD EMPTY. When information is missing, make INTELLIGENT INFERENCES based on context, career patterns, and Norwegian job market standards.
 
-CRITICAL REQUIREMENTS:
-1) EVERY FIELD MUST BE FILLED
-2) NO EMPTY STRINGS OR NULL VALUES
-3) COPY VERBATIM when data exists, but INTELLIGENTLY COMPLETE when missing
-4) PRESERVE original language (Norwegian/English/Ukrainian)
+NEVER return incomplete profiles. EVERY field must contain meaningful, realistic data.`}
+                    onChange={(e) => setAiPromptSettings({ ...aiPromptSettings, custom_system_prompt: e.target.value })}
+                    className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs"
+                    rows={8}
+                    placeholder="Enter system prompt..."
+                  />
+                </div>
 
-USER PROMPT:
-Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
+                {/* User Prompt */}
+                <div>
+                  <label className="block text-sm font-medium text-purple-900 mb-2">
+                    User Prompt (Task Instructions)
+                  </label>
+                  <textarea
+                    value={aiPromptSettings.custom_user_prompt || `Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
 
 This profile will be used for automated job applications in Norway, so ensure:
 - Phone numbers follow Norwegian format (+47 XXX XX XXX)
@@ -398,9 +423,42 @@ This profile will be used for automated job applications in Norway, so ensure:
 - Address should be Norwegian city unless clearly stated otherwise
 - Industries should include relevant Norwegian market sectors
 - All technical skills should be comprehensively categorized
-- Combine ALL information from ALL resumes into ONE comprehensive profile`}</pre>
+- Combine ALL information from ALL resumes into ONE comprehensive profile`}
+                    onChange={(e) => setAiPromptSettings({ ...aiPromptSettings, custom_user_prompt: e.target.value })}
+                    className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs"
+                    rows={10}
+                    placeholder="Enter user prompt..."
+                  />
                 </div>
-              </details>
+
+                {/* Save Button */}
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    setIsSaving(true);
+                    try {
+                      await updateSettings.mutateAsync({
+                        userId: user.id,
+                        updates: aiPromptSettings,
+                      });
+                      alert('✅ AI prompts saved successfully!');
+                    } catch (error: any) {
+                      alert('❌ Error: ' + error.message);
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSaving ? 'Saving...' : 'Save AI Prompts'}
+                </button>
+
+                <p className="text-xs text-purple-600">
+                  💡 Tip: Leave empty to use default prompts. Your custom prompts will be used for all future resume uploads.
+                </p>
+              </div>
             </div>
 
             {/* AI-Parsed Profile Data */}
