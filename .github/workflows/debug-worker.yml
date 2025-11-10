@@ -1,0 +1,23 @@
+name: 🔍 Debug Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Command to run'
+        required: true
+        default: 'sudo journalctl -u worker_v2 -n 50 --no-pager'
+        type: string
+
+jobs:
+  debug:
+    name: Run Debug Command
+    runs-on: self-hosted
+
+    steps:
+      - name: 🔍 Execute Command
+        run: |
+          echo "=========================================="
+          echo "Executing: ${{ inputs.command }}"
+          echo "=========================================="
+          ${{ inputs.command }}
