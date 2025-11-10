@@ -15,3 +15,13 @@ data/logs/
 *_old.py
 test_*.py
 *_backup_*.py
+
+# Node modules and build artifacts
+web-app/node_modules/
+web-app/dist/
+
+# Supabase temporary files
+supabase/.temp/
+
+# Scripts (temporary)
+scripts/
