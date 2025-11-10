@@ -136,6 +136,32 @@ jobs:
             fi
           fi
 
+      - name: 🔍 Check SQL Functions Status
+        run: |
+          echo "======================================================================"
+          echo "🔍 Checking if SQL functions are deployed..."
+          echo "======================================================================"
+          echo ""
+          echo "⚠️ IMPORTANT: SQL functions must be created in Supabase!"
+          echo ""
+          echo "📋 Required functions:"
+          echo "  1. extract_finn_job_links()"
+          echo "  2. create_jobs_from_finn_links()"
+          echo "  3. get_pending_skyvern_jobs()"
+          echo ""
+          echo "📖 Deployment guide:"
+          echo "  https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/database/DEPLOYMENT_GUIDE.md"
+          echo ""
+          echo "📂 Function files (copy to Supabase SQL Editor):"
+          echo "  - database/function_1_extract_links.sql"
+          echo "  - database/function_2_create_jobs.sql"
+          echo "  - database/function_3_get_pending.sql"
+          echo ""
+          echo "🔗 Supabase SQL Editor:"
+          echo "  https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/sql/new"
+          echo ""
+          echo "======================================================================"
+
       - name: ✅ Deployment Summary
         run: |
           echo ""
