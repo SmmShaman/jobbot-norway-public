@@ -27,7 +27,7 @@ jobs:
           echo "✅ All SQL files found"
           echo ""
 
-      - name: 🗄️ Deploy Function 1: extract_finn_job_links
+      - name: "🗄️ Deploy Function 1: extract_finn_job_links"
         run: |
           echo "======================================================================"
           echo "📤 Deploying Function 1: extract_finn_job_links()"
@@ -40,7 +40,7 @@ jobs:
           echo "✅ Function 1 deployed successfully"
           echo ""
 
-      - name: 🗄️ Deploy Function 2: create_jobs_from_finn_links
+      - name: "🗄️ Deploy Function 2: create_jobs_from_finn_links"
         run: |
           echo "======================================================================"
           echo "📤 Deploying Function 2: create_jobs_from_finn_links()"
@@ -53,7 +53,7 @@ jobs:
           echo "✅ Function 2 deployed successfully"
           echo ""
 
-      - name: 🗄️ Deploy Function 3: get_pending_skyvern_jobs
+      - name: "🗄️ Deploy Function 3: get_pending_skyvern_jobs"
         run: |
           echo "======================================================================"
           echo "📤 Deploying Function 3: get_pending_skyvern_jobs()"
