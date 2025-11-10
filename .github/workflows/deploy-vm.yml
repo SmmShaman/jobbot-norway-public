@@ -102,36 +102,38 @@ jobs:
             echo "⚠️ Worker is NOT running"
           fi
 
-      - name: 🔄 Restart Worker
+      - name: 🔄 Restart Worker (systemd)
         run: |
-          cd /home/stuard/jobbot-norway-public/worker
+          echo "🔄 Restarting worker_v2 service..."
 
-          echo "🛑 Stopping old Worker..."
-          pkill -f "python3 worker_v2.py" || echo "No running Worker found"
-
-          sleep 2
-
-          echo "🚀 Starting new Worker..."
-
-          if [ -d "venv" ]; then
-            source venv/bin/activate
-          fi
-
-          nohup python3 worker_v2.py > worker.log 2>&1 &
-
-          NEW_PID=$!
-          echo "✅ Worker started (PID: $NEW_PID)"
-
-          sleep 3
-
-          # Verify it's running
-          if ps -p $NEW_PID > /dev/null; then
-            echo "✅ Worker is alive!"
-            tail -20 worker.log
+          # Check if service exists
+          if systemctl list-unit-files | grep -q worker_v2.service; then
+            echo "✅ Service exists, restarting..."
+            sudo systemctl restart worker_v2
+            sleep 3
+            sudo systemctl status worker_v2 --no-pager || true
+            echo ""
+            echo "📄 Recent logs:"
+            sudo journalctl -u worker_v2 -n 20 --no-pager
           else
-            echo "❌ Worker failed to start!"
-            tail -50 worker.log
-            exit 1
+            echo "⚠️ Service not configured yet"
+            echo "Run: sudo /home/stuard/jobbot-norway-public/deployment/setup_systemd.sh"
+            echo ""
+            echo "Falling back to manual start..."
+            cd /home/stuard/jobbot-norway-public/worker
+            pkill -f "python3 worker_v2.py" || true
+            sleep 2
+            nohup python3 worker_v2.py > worker.log 2>&1 &
+            NEW_PID=$!
+            sleep 3
+            if ps -p $NEW_PID > /dev/null; then
+              echo "✅ Worker started (PID: $NEW_PID)"
+              tail -20 worker.log
+            else
+              echo "❌ Worker failed to start"
+              tail -50 worker.log
+              exit 1
+            fi
           fi
 
       - name: ✅ Deployment Summary
@@ -141,8 +143,15 @@ jobs:
           echo "✅ DEPLOYMENT COMPLETE!"
           echo "======================================================================"
           echo "📊 Worker Status:"
-          ps aux | grep -i '[p]ython.*worker' || echo "⚠️ Worker not found"
-          echo ""
-          echo "📄 Last 10 log lines:"
-          tail -10 /home/stuard/jobbot-norway-public/worker/worker.log
+          if systemctl list-unit-files | grep -q worker_v2.service; then
+            sudo systemctl status worker_v2 --no-pager || true
+            echo ""
+            echo "📄 Recent logs:"
+            sudo journalctl -u worker_v2 -n 10 --no-pager
+          else
+            ps aux | grep -i '[p]ython.*worker' || echo "⚠️ Worker not found"
+            echo ""
+            echo "📄 Last 10 log lines:"
+            tail -10 /home/stuard/jobbot-norway-public/worker/worker.log 2>/dev/null || echo "No logs yet"
+          fi
           echo "======================================================================"

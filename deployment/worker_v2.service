@@ -1,0 +1,32 @@
+[Unit]
+Description=JobBot Worker v2 - Job Scanner and Processor
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stuard
+Group=stuard
+WorkingDirectory=/home/stuard/jobbot-norway-public/worker
+
+# Environment
+EnvironmentFile=/home/stuard/jobbot-norway-public/worker/.env
+
+# Execute worker
+ExecStart=/usr/bin/python3 /home/stuard/jobbot-norway-public/worker/worker_v2.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobbot-worker
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
