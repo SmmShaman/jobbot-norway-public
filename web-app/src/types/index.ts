@@ -35,6 +35,8 @@ export interface UserSettings {
   auto_scan_enabled: boolean;
   scan_interval_hours: number;
   last_scan_at?: string;
+  custom_system_prompt?: string;
+  custom_user_prompt?: string;
   created_at: string;
   updated_at: string;
 }
