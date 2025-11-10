@@ -358,32 +358,27 @@ serve(async (req) => {
       parsed_at: new Date().toISOString(),
     }
 
-    // Save to database - try UPDATE first, then INSERT if not exists
+    // Save to database using upsert (handles both INSERT and UPDATE)
     console.log('Attempting to save profile for user:', finalUserId)
 
-    // Try to update existing record first
-    const { data: updateData, error: updateError } = await supabaseClient
+    // First, delete existing profile to avoid conflicts
+    const { error: deleteError } = await supabaseClient
       .from('user_profiles')
-      .update(profileData)
+      .delete()
       .eq('user_id', finalUserId)
+
+    if (deleteError) {
+      console.log('Delete error (might not exist):', deleteError.message)
+    } else {
+      console.log('Existing profile deleted')
+    }
+
+    // Insert new profile
+    const { data, error } = await supabaseClient
+      .from('user_profiles')
+      .insert(profileData)
       .select()
       .single()
-
-    let data = updateData
-    let error = updateError
-
-    // If no record found (PGRST116), insert new record
-    if (updateError && updateError.code === 'PGRST116') {
-      console.log('No existing profile found, creating new one')
-      const { data: insertData, error: insertError } = await supabaseClient
-        .from('user_profiles')
-        .insert(profileData)
-        .select()
-        .single()
-
-      data = insertData
-      error = insertError
-    }
 
     if (error) {
       console.error('Database error:', error)
