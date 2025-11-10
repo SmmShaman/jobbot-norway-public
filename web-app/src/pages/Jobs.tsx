@@ -17,7 +17,6 @@ import {
   Loader2,
   Sparkles,
   TrendingUp,
-  AlertCircle,
   ThumbsUp
 } from 'lucide-react';
 import type { Job } from '@/types';
