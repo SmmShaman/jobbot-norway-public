@@ -16,3 +16,8 @@ gcp-key.json
 # Environment variables
 RENDER_ENV_VARS.txt
 *.env.local
+
+# Supabase CLI temporary files
+supabase/.temp/
+supabase/.branches/
+supabase/config.toml
