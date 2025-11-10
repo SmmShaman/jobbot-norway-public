@@ -1,0 +1,183 @@
+name: 🚀 Auto-Deploy to VM
+
+on:
+  push:
+    branches:
+      - claude/continue-metadata-scheduler-011CUvwSPhPwyxdh3jTQYAYu
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Worker v2 to VM
+    runs-on: self-hosted  # This will run on your VM's GitHub Actions Runner
+
+    steps:
+      - name: 📍 Checkout latest code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📊 Show current status
+        run: |
+          echo "======================================================================"
+          echo "🚀 Auto-Deploy Started"
+          echo "======================================================================"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Commit message: ${{ github.event.head_commit.message }}"
+          echo "======================================================================"
+
+      - name: 🔄 Pull latest changes
+        run: |
+          cd /home/stuard/jobbot-norway-public
+          git fetch origin
+          git pull origin ${{ github.ref_name }}
+          echo "✅ Code updated!"
+
+      - name: 📦 Install/Update Python dependencies
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          # Check if venv exists
+          if [ -d "venv" ]; then
+            echo "📦 Using venv..."
+            source venv/bin/activate
+            pip install -r requirements.txt
+          else
+            echo "📦 Installing globally..."
+            pip3 install -r requirements.txt
+          fi
+
+          echo "✅ Dependencies updated!"
+
+      - name: 🔧 Setup environment file
+        env:
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          if [ -z "$SUPABASE_SERVICE_KEY" ]; then
+            echo "❌ ERROR: SUPABASE_SERVICE_KEY secret not configured!"
+            echo "   Add it in GitHub: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+          echo "📝 Creating .env file..."
+          {
+            echo "SUPABASE_URL=https://ptrmidlhfdbybxmyovtm.supabase.co"
+            echo "SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}"
+            echo "SKYVERN_API_URL=http://localhost:8000"
+          } > .env
+
+          echo "✅ Environment configured"
+
+      - name: 🎭 Install Playwright browsers
+        run: |
+          cd /home/stuard/jobbot-norway-public/worker
+
+          if [ -d "venv" ]; then
+            source venv/bin/activate
+          fi
+
+          # Check if chromium is installed
+          if ! playwright show-browsers 2>/dev/null | grep -q chromium; then
+            echo "📥 Installing Playwright Chromium..."
+            playwright install chromium
+            echo "✅ Chromium installed!"
+          else
+            echo "✅ Chromium already installed"
+          fi
+
+      - name: 🔍 Check Worker process
+        run: |
+          echo "🔍 Checking if Worker is running..."
+
+          WORKER_PID=$(pgrep -f "python3 worker_v2.py" || echo "")
+
+          if [ -n "$WORKER_PID" ]; then
+            echo "✅ Worker is running (PID: $WORKER_PID)"
+          else
+            echo "⚠️ Worker is NOT running"
+          fi
+
+      - name: 🔄 Restart Worker (systemd)
+        run: |
+          echo "🔄 Restarting worker_v2 service..."
+
+          # Check if service exists
+          if systemctl list-unit-files | grep -q worker_v2.service; then
+            echo "✅ Service exists, restarting..."
+            sudo systemctl restart worker_v2
+            sleep 3
+            sudo systemctl status worker_v2 --no-pager || true
+            echo ""
+            echo "📄 Recent logs:"
+            sudo journalctl -u worker_v2 -n 20 --no-pager
+          else
+            echo "⚠️ Service not configured yet"
+            echo "Run: sudo /home/stuard/jobbot-norway-public/deployment/setup_systemd.sh"
+            echo ""
+            echo "Falling back to manual start..."
+            cd /home/stuard/jobbot-norway-public/worker
+            pkill -f "python3 worker_v2.py" || true
+            sleep 2
+            nohup python3 worker_v2.py > worker.log 2>&1 &
+            NEW_PID=$!
+            sleep 3
+            if ps -p $NEW_PID > /dev/null; then
+              echo "✅ Worker started (PID: $NEW_PID)"
+              tail -20 worker.log
+            else
+              echo "❌ Worker failed to start"
+              tail -50 worker.log
+              exit 1
+            fi
+          fi
+
+      - name: 🔍 Check SQL Functions Status
+        run: |
+          echo "======================================================================"
+          echo "🔍 Checking if SQL functions are deployed..."
+          echo "======================================================================"
+          echo ""
+          echo "⚠️ IMPORTANT: SQL functions must be created in Supabase!"
+          echo ""
+          echo "📋 Required functions:"
+          echo "  1. extract_finn_job_links()"
+          echo "  2. create_jobs_from_finn_links()"
+          echo "  3. get_pending_skyvern_jobs()"
+          echo ""
+          echo "📖 Deployment guide:"
+          echo "  https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/database/DEPLOYMENT_GUIDE.md"
+          echo ""
+          echo "📂 Function files (copy to Supabase SQL Editor):"
+          echo "  - database/function_1_extract_links.sql"
+          echo "  - database/function_2_create_jobs.sql"
+          echo "  - database/function_3_get_pending.sql"
+          echo ""
+          echo "🔗 Supabase SQL Editor:"
+          echo "  https://supabase.com/dashboard/project/ptrmidlhfdbybxmyovtm/sql/new"
+          echo ""
+          echo "======================================================================"
+
+      - name: ✅ Deployment Summary
+        run: |
+          echo ""
+          echo "======================================================================"
+          echo "✅ DEPLOYMENT COMPLETE!"
+          echo "======================================================================"
+          echo "📊 Worker Status:"
+          if systemctl list-unit-files | grep -q worker_v2.service; then
+            sudo systemctl status worker_v2 --no-pager || true
+            echo ""
+            echo "📄 Recent logs:"
+            sudo journalctl -u worker_v2 -n 10 --no-pager
+          else
+            ps aux | grep -i '[p]ython.*worker' || echo "⚠️ Worker not found"
+            echo ""
+            echo "📄 Last 10 log lines:"
+            tail -10 /home/stuard/jobbot-norway-public/worker/worker.log 2>/dev/null || echo "No logs yet"
+          fi
+          echo "======================================================================"
