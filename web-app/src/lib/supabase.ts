@@ -75,27 +75,44 @@ export const storage = {
     console.log('Public URL:', publicUrl);
 
     // 3. Get current resume list from user_settings
-    const { data: settings } = await supabase
+    const { data: settings, error: fetchError } = await supabase
       .from('user_settings')
       .select('resume_files')
       .eq('user_id', userId)
       .single();
 
+    if (fetchError) {
+      console.error('Error fetching settings:', fetchError);
+      throw new Error('Failed to fetch user settings: ' + fetchError.message);
+    }
+
     const currentFiles = settings?.resume_files || [];
+    console.log('Current files before update:', currentFiles);
 
     // Add new file if not already in list (max 5 files)
     if (!currentFiles.includes(fileName) && currentFiles.length < 5) {
       currentFiles.push(fileName);
+    } else if (currentFiles.includes(fileName)) {
+      console.log('File already in list, skipping');
+    } else {
+      throw new Error('Maximum 5 resumes reached');
     }
 
-    // 4. Update user_settings with resume files list
-    await supabase
+    console.log('Files after adding:', currentFiles);
+
+    // 4. Update user_settings with resume files list (using upsert for safety)
+    const { error: updateError } = await supabase
       .from('user_settings')
       .update({
         resume_storage_path: fileName, // Keep for backward compatibility
         resume_files: currentFiles
       })
       .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Error updating settings:', updateError);
+      throw new Error('Failed to save resume list: ' + updateError.message);
+    }
 
     console.log('Resume added to list. Total files:', currentFiles.length);
 
