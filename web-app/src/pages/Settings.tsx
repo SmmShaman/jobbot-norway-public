@@ -353,17 +353,42 @@ export default function Settings() {
               )}
             </div>
 
+            {/* Debug info - показує що є в settings */}
+            {settings && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs">
+                <details>
+                  <summary className="cursor-pointer font-medium text-blue-900">🔍 Debug: Settings Data</summary>
+                  <pre className="mt-2 text-blue-800 overflow-auto">
+                    {JSON.stringify({
+                      resume_storage_path: settings.resume_storage_path,
+                      resume_files: settings.resume_files,
+                      resume_files_length: settings.resume_files?.length || 0,
+                    }, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            )}
+
             {/* Uploaded Resumes List */}
-            {settings?.resume_files && settings.resume_files.length > 0 && (
+            {settings && (settings.resume_files?.length > 0 || settings.resume_storage_path) && (
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary-600" />
-                  Uploaded Resumes ({settings.resume_files.length}/5)
+                  Uploaded Resumes ({(settings.resume_files?.length || (settings.resume_storage_path ? 1 : 0))}/5)
                 </h3>
 
+                {/* Show message if resume_files doesn't exist (migration not run) */}
+                {!settings.resume_files && settings.resume_storage_path && (
+                  <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800">
+                    ⚠️ Старий формат даних. Виконай SQL міграцію щоб побачити всі резюме.
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  {settings.resume_files.map((filePath: string, index: number) => (
-                    <div key={filePath} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  {/* Show new format resume_files */}
+                  {settings.resume_files && settings.resume_files.length > 0 ? (
+                    settings.resume_files.map((filePath: string, index: number) => (
+                      <div key={filePath} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3">
                         <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">
                           #{index + 1}
@@ -403,7 +428,50 @@ export default function Settings() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  ) : settings.resume_storage_path ? (
+                    /* Fallback: show old format resume_storage_path as single resume */
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">
+                          #1
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {settings.resume_storage_path.split('/').pop()}
+                          </p>
+                          <p className="text-xs text-gray-500">{settings.resume_storage_path}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <a
+                          href={`https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs bg-white border border-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                        >
+                          📄 PDF
+                        </a>
+                        <button
+                          onClick={async () => {
+                            const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`;
+                            const response = await fetch(url);
+                            const blob = await response.blob();
+                            const text = await blob.text();
+                            const win = window.open('', '_blank');
+                            if (win) {
+                              win.document.write('<html><head><title>Extracted Text</title></head><body><pre style="white-space: pre-wrap; font-family: monospace; padding: 20px; line-height: 1.5;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></body></html>');
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Текст
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Analyze Button */}
@@ -421,11 +489,11 @@ export default function Settings() {
                       setIsSaving(false);
                     }
                   }}
-                  disabled={isSaving}
+                  disabled={isSaving || (!settings.resume_files && !settings.resume_storage_path)}
                   className="w-full mt-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
                 >
                   <Sparkles className="w-5 h-5" />
-                  {isSaving ? 'Аналізую резюме...' : `Аналізувати всі ${settings.resume_files.length} резюме з AI`}
+                  {isSaving ? 'Аналізую резюме...' : `Аналізувати всі ${settings.resume_files?.length || 1} резюме з AI`}
                 </button>
 
                 <p className="text-xs text-gray-500 mt-2 text-center">
