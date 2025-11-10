@@ -124,8 +124,10 @@ export interface Job {
   relevance_score?: number;
   ai_analysis?: AIAnalysis;
   match_reasons?: string[];
+  relevance_reasons?: string[]; // From new schema (alias for match_reasons)
   concerns?: string[];
   recommendation?: 'APPLY' | 'SKIP' | 'REVIEW';
+  ai_recommendation?: 'APPLY' | 'SKIP' | 'REVIEW' | 'PENDING'; // From new schema
 
   // Processing status
   status: 'NEW' | 'REVIEWED' | 'RELEVANT' | 'NOT_RELEVANT' | 'APPLIED' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';

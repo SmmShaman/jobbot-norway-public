@@ -14,7 +14,11 @@ import {
   CheckCircle,
   XCircle,
   Search,
-  Loader2
+  Loader2,
+  Sparkles,
+  TrendingUp,
+  AlertCircle,
+  ThumbsUp
 } from 'lucide-react';
 import type { Job } from '@/types';
 
@@ -23,7 +27,9 @@ export default function Jobs() {
   const [filters, setFilters] = useState({
     status: 'all',
     source: 'all',
-    search: ''
+    search: '',
+    minRelevance: 0,
+    aiRecommendation: 'all'
   });
 
   const { data: jobs, isLoading } = useJobs(user?.id || '', filters);
@@ -37,8 +43,19 @@ export default function Jobs() {
 
     const matchesStatus = filters.status === 'all' || job.status === filters.status;
     const matchesSource = filters.source === 'all' || job.source === filters.source;
+    const matchesRelevance = !job.relevance_score || job.relevance_score >= filters.minRelevance;
+    const matchesAIRecommendation = filters.aiRecommendation === 'all' ||
+      job.ai_recommendation === filters.aiRecommendation;
 
-    return matchesSearch && matchesStatus && matchesSource;
+    return matchesSearch && matchesStatus && matchesSource && matchesRelevance && matchesAIRecommendation;
+  }).sort((a: Job, b: Job) => {
+    // Sort by relevance score (highest first), then by created date
+    const relevanceA = a.relevance_score || 0;
+    const relevanceB = b.relevance_score || 0;
+    if (relevanceB !== relevanceA) {
+      return relevanceB - relevanceA;
+    }
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
   }) || [];
 
   const statusColors: Record<string, string> = {
@@ -54,6 +71,25 @@ export default function Jobs() {
   const sourceColors: Record<string, string> = {
     'FINN': 'bg-orange-100 text-orange-800',
     'NAV': 'bg-blue-100 text-blue-800'
+  };
+
+  const aiRecommendationColors: Record<string, string> = {
+    'APPLY': 'bg-green-100 text-green-800',
+    'REVIEW': 'bg-yellow-100 text-yellow-800',
+    'SKIP': 'bg-red-100 text-red-800',
+    'PENDING': 'bg-gray-100 text-gray-600'
+  };
+
+  const getRelevanceColor = (score: number): string => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 50) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getRelevanceBgColor = (score: number): string => {
+    if (score >= 80) return 'bg-green-50 border-green-200';
+    if (score >= 50) return 'bg-yellow-50 border-yellow-200';
+    return 'bg-red-50 border-red-200';
   };
 
   if (isLoading) {
@@ -79,7 +115,7 @@ export default function Jobs() {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           {/* Search */}
           <div className="md:col-span-2">
             <div className="relative">
@@ -123,6 +159,36 @@ export default function Jobs() {
               <option value="NAV">NAV</option>
             </select>
           </div>
+
+          {/* AI Recommendation Filter */}
+          <div>
+            <select
+              value={filters.aiRecommendation}
+              onChange={(e) => setFilters({ ...filters, aiRecommendation: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="all">AI: All</option>
+              <option value="APPLY">✓ Apply</option>
+              <option value="REVIEW">⚡ Review</option>
+              <option value="SKIP">✗ Skip</option>
+              <option value="PENDING">○ Pending</option>
+            </select>
+          </div>
+
+          {/* Min Relevance Filter */}
+          <div>
+            <select
+              value={filters.minRelevance}
+              onChange={(e) => setFilters({ ...filters, minRelevance: Number(e.target.value) })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="0">Min Relevance: 0%</option>
+              <option value="50">Min Relevance: 50%</option>
+              <option value="70">Min Relevance: 70%</option>
+              <option value="80">Min Relevance: 80%</option>
+              <option value="90">Min Relevance: 90%</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -141,7 +207,7 @@ export default function Jobs() {
                 {/* Header Row */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="text-xl font-semibold text-gray-900">{job.title}</h3>
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[job.status] || 'bg-gray-100 text-gray-800'}`}>
                         {job.status}
@@ -149,6 +215,28 @@ export default function Jobs() {
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${sourceColors[job.source] || 'bg-gray-100 text-gray-800'}`}>
                         {job.source}
                       </span>
+
+                      {/* AI Relevance Score */}
+                      {job.relevance_score !== undefined && job.relevance_score > 0 && (
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${
+                          job.relevance_score >= 80 ? 'bg-green-100 text-green-800' :
+                          job.relevance_score >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          <Sparkles className="w-3 h-3" />
+                          {job.relevance_score}% Match
+                        </span>
+                      )}
+
+                      {/* AI Recommendation */}
+                      {job.ai_recommendation && job.ai_recommendation !== 'PENDING' && (
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${aiRecommendationColors[job.ai_recommendation]}`}>
+                          {job.ai_recommendation === 'APPLY' && '✓'}
+                          {job.ai_recommendation === 'REVIEW' && '⚡'}
+                          {job.ai_recommendation === 'SKIP' && '✗'}
+                          {' '}{job.ai_recommendation}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
@@ -191,6 +279,29 @@ export default function Jobs() {
                 {job.description && (
                   <div className="mb-4">
                     <p className="text-gray-700 line-clamp-3">{job.description}</p>
+                  </div>
+                )}
+
+                {/* AI Relevance Reasons */}
+                {job.relevance_reasons && job.relevance_reasons.length > 0 && (
+                  <div className={`mb-4 p-3 rounded-lg border ${getRelevanceBgColor(job.relevance_score || 0)}`}>
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                      <TrendingUp className="w-4 h-4 mr-1" />
+                      AI Analysis
+                    </h4>
+                    <ul className="space-y-1">
+                      {job.relevance_reasons.map((reason: string, i: number) => (
+                        <li key={i} className="text-sm text-gray-700 flex items-start">
+                          <ThumbsUp className={`w-3 h-3 mr-2 mt-0.5 flex-shrink-0 ${getRelevanceColor(job.relevance_score || 0)}`} />
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                    {job.analyzed_at && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Analyzed: {new Date(job.analyzed_at).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 )}
 
