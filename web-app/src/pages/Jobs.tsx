@@ -13,8 +13,6 @@ import {
   ExternalLink,
   CheckCircle,
   XCircle,
-  Eye,
-  Filter,
   Search,
   Loader2
 } from 'lucide-react';
@@ -48,6 +46,7 @@ export default function Jobs() {
     'REVIEWED': 'bg-purple-100 text-purple-800',
     'RELEVANT': 'bg-green-100 text-green-800',
     'NOT_RELEVANT': 'bg-gray-100 text-gray-800',
+    'APPROVED': 'bg-teal-100 text-teal-800',
     'APPLIED': 'bg-indigo-100 text-indigo-800',
     'REJECTED': 'bg-red-100 text-red-800',
     'ARCHIVED': 'bg-gray-100 text-gray-600'
@@ -108,6 +107,7 @@ export default function Jobs() {
               <option value="REVIEWED">Reviewed</option>
               <option value="RELEVANT">Relevant</option>
               <option value="NOT_RELEVANT">Not Relevant</option>
+              <option value="APPROVED">Approved</option>
               <option value="APPLIED">Applied</option>
               <option value="REJECTED">Rejected</option>
             </select>
