@@ -2,10 +2,12 @@
  * ENHANCED PDF Parser Edge Function
  * Supports MULTIPLE resumes (up to 5) and creates comprehensive profile
  * Uses customizable AI prompt for complete profile generation
+ * Uses unpdf library for high-quality PDF text extraction
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { extractText, getDocumentProxy } from 'https://esm.sh/unpdf@0.12.1'
 
 // CORS headers
 const corsHeaders = {
@@ -238,9 +240,10 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
 }
 
 async function extractTextFromPDF(fileUrl: string): Promise<string> {
-  console.log('Downloading file from:', fileUrl)
+  console.log('Downloading PDF from:', fileUrl)
 
   try {
+    // Download PDF file
     const response = await fetch(fileUrl)
     if (!response.ok) {
       throw new Error(`Failed to download file: ${response.statusText}`)
@@ -249,17 +252,22 @@ async function extractTextFromPDF(fileUrl: string): Promise<string> {
     const arrayBuffer = await response.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
 
-    // Convert to text (basic extraction - for production use proper PDF parser)
-    const decoder = new TextDecoder('utf-8')
-    let text = decoder.decode(uint8Array)
+    console.log('Parsing PDF with unpdf library...')
 
-    // Basic text cleaning
-    text = text.replace(/[^\x20-\x7E\n\r\t\u00A0-\uFFFF]/g, ' ')
+    // Parse PDF with unpdf (industry-standard PDF.js based parser)
+    const pdf = await getDocumentProxy(uint8Array)
+
+    // Extract text from all pages
+    const { totalPages, text } = await extractText(pdf, { mergePages: true })
+
+    console.log(`Successfully extracted text from ${totalPages} pages`)
+    console.log(`Extracted ${text.length} characters`)
 
     return text
   } catch (error) {
     console.error('PDF extraction error:', error)
-    return `[Error extracting text from ${fileUrl}]`
+    // Fallback error message with more context
+    throw new Error(`Failed to extract text from PDF: ${error.message}`)
   }
 }
 
