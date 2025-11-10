@@ -339,15 +339,68 @@ export default function Settings() {
                   <p className="text-sm text-green-600 mt-1">
                     {settings.resume_storage_path.split('/').pop()}
                   </p>
+                  <div className="mt-3 flex gap-2 justify-center">
+                    <a
+                      href={`https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm bg-white border border-green-300 text-green-700 px-3 py-1 rounded hover:bg-green-50"
+                    >
+                      📄 Download PDF
+                    </a>
+                    <button
+                      onClick={async () => {
+                        const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${settings.resume_storage_path}`;
+                        const response = await fetch(url);
+                        const blob = await response.blob();
+                        const text = await blob.text();
+                        const win = window.open('', '_blank');
+                        if (win) {
+                          win.document.write('<pre style="white-space: pre-wrap; font-family: monospace; padding: 20px;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 text-sm bg-white border border-green-300 text-green-700 px-3 py-1 rounded hover:bg-green-50"
+                    >
+                      📝 View Extracted Text
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 text-sm">
+              <p className="text-blue-800 text-sm mb-3">
                 <strong>Info:</strong> Your resume will be automatically analyzed by AI (Azure OpenAI GPT-4) to extract
                 skills, experience, and qualifications. This helps match you with relevant jobs.
               </p>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm font-medium text-blue-900 hover:text-blue-700">
+                  📋 View AI Analysis Prompt
+                </summary>
+                <div className="mt-3 p-3 bg-white rounded border border-blue-200 text-xs text-gray-700 max-h-64 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap font-mono">{`SYSTEM PROMPT:
+You are an EXPERT HR Data Analyst specializing in creating COMPLETE, DETAILED professional profiles for Norwegian job applications.
+
+Your mission: Extract EVERY possible detail from resumes and CREATE A FULLY POPULATED profile that leaves NO FIELD EMPTY. When information is missing, make INTELLIGENT INFERENCES based on context, career patterns, and Norwegian job market standards.
+
+CRITICAL REQUIREMENTS:
+1) EVERY FIELD MUST BE FILLED
+2) NO EMPTY STRINGS OR NULL VALUES
+3) COPY VERBATIM when data exists, but INTELLIGENTLY COMPLETE when missing
+4) PRESERVE original language (Norwegian/English/Ukrainian)
+
+USER PROMPT:
+Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
+
+This profile will be used for automated job applications in Norway, so ensure:
+- Phone numbers follow Norwegian format (+47 XXX XX XXX)
+- Include Norwegian language skills (minimum B1 level)
+- Address should be Norwegian city unless clearly stated otherwise
+- Industries should include relevant Norwegian market sectors
+- All technical skills should be comprehensively categorized
+- Combine ALL information from ALL resumes into ONE comprehensive profile`}</pre>
+                </div>
+              </details>
             </div>
 
             {/* AI-Parsed Profile Data */}
