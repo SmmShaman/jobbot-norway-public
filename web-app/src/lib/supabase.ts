@@ -114,27 +114,41 @@ export const storage = {
 
 // Database helpers with RLS
 export const db = {
-  // Profile operations
+  // Profile operations (legacy profiles table - kept for backward compatibility)
   getProfile: async (userId: string) => {
+    // Try user_profiles first (new schema), fallback to profiles (old schema)
+    const { data: userProfile, error: userProfileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (!userProfileError && userProfile) {
+      return userProfile;
+    }
+
+    // Fallback to old profiles table if exists
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
-    if (error) throw error;
+    // Ignore "not found" errors for backward compatibility
+    if (error && error.code !== 'PGRST116' && error.code !== '42P01') throw error;
     return data;
   },
 
   updateProfile: async (userId: string, updates: Partial<any>) => {
+    // Update in user_profiles (new schema)
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .update(updates)
-      .eq('id', userId)
+      .eq('user_id', userId)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error && error.code !== 'PGRST116') throw error;
     return data;
   },
 
