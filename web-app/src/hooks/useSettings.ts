@@ -55,3 +55,12 @@ export const useUpdateProfile = () => {
     },
   });
 };
+
+// AI-parsed resume profile
+export const useAIParsedProfile = (userId: string) => {
+  return useQuery({
+    queryKey: ['aiProfile', userId],
+    queryFn: () => db.getUserProfile(userId),
+    enabled: !!userId,
+  });
+};

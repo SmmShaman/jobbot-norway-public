@@ -54,6 +54,7 @@ export const storage = {
     const fileExt = file.name.split('.').pop();
     const fileName = `${userId}/resume_${Date.now()}.${fileExt}`;
 
+    // 1. Upload file to storage
     const { data, error } = await supabase.storage
       .from('resumes')
       .upload(fileName, file, {
@@ -62,7 +63,33 @@ export const storage = {
       });
 
     if (error) throw error;
-    return data;
+
+    // 2. Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('resumes')
+      .getPublicUrl(fileName);
+
+    // 3. Call PDF Parser Edge Function
+    const { data: parseResult, error: parseError } = await supabase.functions.invoke('pdf-parser', {
+      body: {
+        userId,
+        resumeUrl: publicUrl,
+        storagePath: fileName,
+      },
+    });
+
+    if (parseError) {
+      console.error('PDF parsing failed:', parseError);
+      throw new Error('Failed to parse resume: ' + parseError.message);
+    }
+
+    // 4. Update user_settings with resume path
+    await supabase
+      .from('user_settings')
+      .update({ resume_storage_path: fileName })
+      .eq('user_id', userId);
+
+    return { ...data, parseResult };
   },
 
   getResumeUrl: async (path: string) => {
@@ -108,6 +135,18 @@ export const db = {
       .single();
 
     if (error) throw error;
+    return data;
+  },
+
+  // User Profile (AI-parsed resume data)
+  getUserProfile: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // Ignore "not found"
     return data;
   },
 

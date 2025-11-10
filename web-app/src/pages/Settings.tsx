@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume } from '@/hooks/useSettings';
-import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2 } from 'lucide-react';
+import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile } from '@/hooks/useSettings';
+import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2 } from 'lucide-react';
 
 export default function Settings() {
   const { user } = useAuth();
   const { data: profile } = useUserProfile(user?.id || '');
   const { data: settings } = useUserSettings(user?.id || '');
+  const { data: aiProfile, refetch: refetchAIProfile } = useAIParsedProfile(user?.id || '');
   const updateProfile = useUpdateProfile();
   const updateSettings = useUpdateSettings();
   const uploadResume = useUploadResume();
@@ -186,11 +187,16 @@ export default function Settings() {
       return;
     }
 
+    setIsSaving(true);
     try {
       await uploadResume.mutateAsync({ userId: user.id, file });
-      alert('✅ Resume uploaded successfully!');
-    } catch (error) {
-      alert('❌ Error uploading resume');
+      await refetchAIProfile(); // Refresh AI-parsed data
+      alert('✅ Resume uploaded and analyzed successfully!');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      alert('❌ Error: ' + (error.message || 'Upload failed'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -300,7 +306,7 @@ export default function Settings() {
         {/* Resume Tab */}
         {activeTab === 'resume' && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold mb-4">Resume Upload</h2>
+            <h2 className="text-xl font-semibold mb-4">Resume Upload & AI Analysis</h2>
 
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
               <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
@@ -312,18 +318,24 @@ export default function Settings() {
                 onChange={handleResumeUpload}
                 className="hidden"
                 id="resume-upload"
+                disabled={isSaving}
               />
               <label
                 htmlFor="resume-upload"
-                className="inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 cursor-pointer"
+                className={`inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 cursor-pointer ${
+                  isSaving ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 <Upload className="w-4 h-4" />
-                Choose File
+                {isSaving ? 'Analyzing...' : 'Choose File'}
               </label>
 
               {settings?.resume_storage_path && (
                 <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-800 font-medium">✓ Resume uploaded</p>
+                  <p className="text-green-800 font-medium flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" />
+                    Resume uploaded
+                  </p>
                   <p className="text-sm text-green-600 mt-1">
                     {settings.resume_storage_path.split('/').pop()}
                   </p>
@@ -333,10 +345,96 @@ export default function Settings() {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-blue-800 text-sm">
-                <strong>Tip:</strong> Your resume will be analyzed by AI to extract skills and experience.
-                This helps match you with relevant jobs automatically.
+                <strong>Info:</strong> Your resume will be automatically analyzed by AI (Azure OpenAI GPT-4) to extract
+                skills, experience, and qualifications. This helps match you with relevant jobs.
               </p>
             </div>
+
+            {/* AI-Parsed Profile Data */}
+            {aiProfile && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  AI-Extracted Profile Data
+                </h3>
+
+                <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                  {aiProfile.full_name && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Full Name</label>
+                      <p className="text-gray-900">{aiProfile.full_name}</p>
+                    </div>
+                  )}
+
+                  {aiProfile.professional_summary && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Professional Summary</label>
+                      <p className="text-gray-900">{aiProfile.professional_summary}</p>
+                    </div>
+                  )}
+
+                  {aiProfile.total_experience_years > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Years of Experience</label>
+                      <p className="text-gray-900">{aiProfile.total_experience_years} years</p>
+                    </div>
+                  )}
+
+                  {aiProfile.technical_skills && aiProfile.technical_skills.length > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Technical Skills</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {aiProfile.technical_skills.map((skill: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiProfile.languages && aiProfile.languages.length > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Languages</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {aiProfile.languages.map((lang: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                          >
+                            {lang}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiProfile.work_experience && Array.isArray(aiProfile.work_experience) && aiProfile.work_experience.length > 0 && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Work Experience</label>
+                      <div className="mt-2 space-y-3">
+                        {aiProfile.work_experience.map((exp: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                            <p className="font-medium text-gray-900">{exp.position}</p>
+                            <p className="text-sm text-gray-600">{exp.company}</p>
+                            {exp.duration && (
+                              <p className="text-sm text-gray-500">{exp.duration}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-sm text-gray-500">
+                  Parsed at: {new Date(aiProfile.parsed_at).toLocaleString()}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
