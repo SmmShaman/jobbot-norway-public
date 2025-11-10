@@ -16,3 +16,13 @@ gcp-key.json
 # Environment variables
 RENDER_ENV_VARS.txt
 *.env.local
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
