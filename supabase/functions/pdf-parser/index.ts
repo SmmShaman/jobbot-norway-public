@@ -321,17 +321,39 @@ serve(async (req) => {
       parsed_at: new Date().toISOString(),
     }
 
-    // Save to database
-    const { data, error } = await supabaseClient
+    // Save to database - try UPDATE first, then INSERT if not exists
+    console.log('Attempting to save profile for user:', finalUserId)
+
+    // Try to update existing record first
+    const { data: updateData, error: updateError } = await supabaseClient
       .from('user_profiles')
-      .upsert(profileData, { onConflict: 'user_id' })
+      .update(profileData)
+      .eq('user_id', finalUserId)
       .select()
       .single()
+
+    let data = updateData
+    let error = updateError
+
+    // If no record found (PGRST116), insert new record
+    if (updateError && updateError.code === 'PGRST116') {
+      console.log('No existing profile found, creating new one')
+      const { data: insertData, error: insertError } = await supabaseClient
+        .from('user_profiles')
+        .insert(profileData)
+        .select()
+        .single()
+
+      data = insertData
+      error = insertError
+    }
 
     if (error) {
       console.error('Database error:', error)
       throw error
     }
+
+    console.log('Profile saved successfully:', data?.id)
 
     return new Response(
       JSON.stringify({
