@@ -362,7 +362,7 @@ export default function Settings() {
                 </h3>
 
                 <div className="space-y-2">
-                  {settings.resume_files.map((filePath, index) => (
+                  {settings.resume_files.map((filePath: string, index: number) => (
                     <div key={filePath} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3">
                         <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-sm font-medium">

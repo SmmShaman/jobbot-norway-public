@@ -123,7 +123,7 @@ export const storage = {
     }
 
     // Get public URLs for all files
-    const resumeUrls = resumeFiles.map(fileName => {
+    const resumeUrls = resumeFiles.map((fileName: string) => {
       const { data } = supabase.storage.from('resumes').getPublicUrl(fileName);
       return data.publicUrl;
     });
