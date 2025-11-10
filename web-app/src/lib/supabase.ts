@@ -77,8 +77,8 @@ export const storage = {
     // 3. Call PDF Parser Edge Function
     const { data: parseResult, error: parseError } = await supabase.functions.invoke('pdf-parser', {
       body: {
-        userId,
-        resumeUrl: publicUrl,
+        user_id: userId,  // Edge Function expects user_id (underscore)
+        file_url: publicUrl,  // Edge Function expects file_url (underscore)
         storagePath: fileName,
         currentUser: userId,
       },
