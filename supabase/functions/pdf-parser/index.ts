@@ -104,8 +104,31 @@ ${resume.content}
   console.log(`Processing ${resumes.length} files for ${currentUser}`)
   console.log(`Total input length: ${detailedResumeText.length} chars`)
 
-  // Use custom prompt prefix if provided, otherwise use default
-  const userPromptPrefix = customUserPromptPrefix || `Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
+  // ============================================================
+  // CUSTOM PROMPT LOGIC: If user provides custom prompts, use ONLY those
+  // Otherwise, use default comprehensive JSON generation
+  // ============================================================
+
+  let systemPrompt: string
+  let finalUserPrompt: string
+
+  if (customUserPromptPrefix) {
+    // USER CUSTOM MODE: Use ONLY custom prompts without any defaults
+    systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
+
+    // Build simple user prompt with ONLY custom instructions
+    finalUserPrompt = `${customUserPromptPrefix}
+
+INPUT DATA - ${resumes.length} RESUME FILES:
+${detailedResumeText}`
+
+    console.log('🎨 CUSTOM PROMPT MODE: Using user-defined prompts WITHOUT default JSON structure')
+
+  } else {
+    // DEFAULT MODE: Use comprehensive JSON generation with all rules
+    systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
+
+    const userPromptPrefix = `Create a MAXIMALLY COMPLETE professional JSON profile for Norwegian job applications.
 
 This profile will be used for automated job applications in Norway, so ensure:
 - Phone numbers follow Norwegian format (+47 XXX XX XXX)
@@ -115,7 +138,7 @@ This profile will be used for automated job applications in Norway, so ensure:
 - All technical skills should be comprehensively categorized
 - Combine ALL information from ALL resumes into ONE comprehensive profile`
 
-  const userPrompt = `TASK: Create a MAXIMALLY COMPLETE professional JSON profile for ${currentUser} for Norwegian job applications.
+    finalUserPrompt = `TASK: Create a MAXIMALLY COMPLETE professional JSON profile for ${currentUser} for Norwegian job applications.
 
 ${userPromptPrefix}
 
@@ -197,32 +220,27 @@ GENERATE COMPLETE JSON PROFILE (NO CODE FENCES):
 
 CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combine information from ALL ${resumes.length} resumes.`
 
-  // Use custom system prompt if provided, otherwise use default
-  const systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
-  const finalUserPrompt = customUserPromptPrefix ? userPrompt : userPrompt
+    console.log('📋 DEFAULT MODE: Using comprehensive JSON structure generation')
+  }
 
   // ============ DETAILED LOGGING FOR DEBUGGING ============
   console.log('========================================')
   console.log('📋 AI PROMPTS BEING SENT TO AZURE OPENAI:')
   console.log('========================================')
 
-  console.log('🔧 Custom prompts from DB:')
+  console.log('🔧 Prompt Mode:', customUserPromptPrefix ? '🎨 CUSTOM (User-defined)' : '📋 DEFAULT (JSON structure)')
   console.log('  - customSystemPrompt exists:', !!customSystemPrompt)
   console.log('  - customUserPromptPrefix exists:', !!customUserPromptPrefix)
 
-  if (customSystemPrompt) {
-    console.log('\n✏️ USING CUSTOM SYSTEM PROMPT:')
-    console.log('First 300 chars:', customSystemPrompt.substring(0, 300) + '...')
-  } else {
-    console.log('\n📄 USING DEFAULT SYSTEM PROMPT')
-    console.log('First 300 chars:', ENHANCED_PROMPT_SYSTEM.substring(0, 300) + '...')
-  }
+  console.log('\n✏️ SYSTEM PROMPT:')
+  console.log('First 300 chars:', systemPrompt.substring(0, 300) + '...')
+
+  console.log('\n✏️ USER PROMPT:')
+  console.log('First 500 chars:', finalUserPrompt.substring(0, 500) + '...')
 
   if (customUserPromptPrefix) {
-    console.log('\n✏️ CUSTOM USER PROMPT PREFIX:')
-    console.log('First 300 chars:', customUserPromptPrefix.substring(0, 300) + '...')
-  } else {
-    console.log('\n📄 USING DEFAULT USER PROMPT PREFIX')
+    console.log('\n⚠️  IMPORTANT: Custom prompt mode - NO default JSON structure enforced')
+    console.log('AI will follow ONLY the custom instructions provided by user')
   }
 
   console.log('\n📊 FINAL PROMPTS STATS:')
@@ -265,7 +283,33 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
   const data = await response.json()
   const content = data.choices[0].message.content
 
-  // Clean JSON response
+  // If using custom prompts, return raw content (might not be JSON)
+  if (customUserPromptPrefix) {
+    console.log('🎨 Custom prompt mode: Attempting to parse AI response')
+    console.log('Response preview (first 500 chars):', content.substring(0, 500))
+
+    try {
+      // Try to parse as JSON first
+      const cleanedContent = content
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim()
+
+      const parsed = JSON.parse(cleanedContent)
+      console.log('✅ Successfully parsed as JSON')
+      return parsed
+    } catch (e) {
+      console.log('⚠️  Not valid JSON, returning as structured text response')
+      // Return as a structured object with raw content
+      return {
+        rawResponse: content,
+        customPromptUsed: true,
+        note: 'This is a custom prompt response, not standard JSON profile format'
+      }
+    }
+  }
+
+  // Default mode: expect JSON
   const cleanedContent = content
     .replace(/```json\n?/g, '')
     .replace(/```\n?/g, '')
@@ -376,29 +420,59 @@ serve(async (req) => {
     )
 
     // Map to database schema
-    const profileData = {
-      user_id: finalUserId,
-      full_name: parsedProfile.personalInfo?.fullName || '',
-      email: parsedProfile.personalInfo?.email || '',
-      phone: parsedProfile.personalInfo?.phone || '',
-      location: parsedProfile.personalInfo?.address?.city || '',
-      professional_summary: parsedProfile.professionalSummary || '',
-      career_objective: parsedProfile.careerStats?.currentRole || '',
-      total_experience_years: parsedProfile.careerStats?.totalExperienceYears || 0,
-      work_experience: parsedProfile.workExperience || [],
-      education: parsedProfile.education || [],
-      technical_skills: [
-        ...(parsedProfile.technicalSkills?.programmingLanguages || []),
-        ...(parsedProfile.technicalSkills?.frameworks || []),
-        ...(parsedProfile.technicalSkills?.databases || []),
-        ...(parsedProfile.technicalSkills?.aiTools || []),
-        ...(parsedProfile.technicalSkills?.other || [])
-      ],
-      languages: parsedProfile.languages?.map((l: any) => `${l.language} (${l.proficiencyLevel})`) || [],
-      soft_skills: parsedProfile.softSkills || [],
-      certifications: parsedProfile.certifications || [],
-      resume_file_url: urls[0], // Store first resume URL
-      parsed_at: new Date().toISOString(),
+    let profileData: any
+
+    // Check if this is a custom prompt response (non-standard format)
+    if (parsedProfile.customPromptUsed && parsedProfile.rawResponse) {
+      console.log('⚠️  Custom prompt response detected - storing as raw text in professional_summary')
+
+      // Store raw response in professional_summary for custom prompts
+      profileData = {
+        user_id: finalUserId,
+        full_name: finalCurrentUser,
+        email: '',
+        phone: '',
+        location: '',
+        professional_summary: parsedProfile.rawResponse, // Store full AI response here
+        career_objective: 'Custom AI Profile Analysis',
+        total_experience_years: 0,
+        work_experience: [],
+        education: [],
+        technical_skills: [],
+        languages: [],
+        soft_skills: [],
+        certifications: [],
+        resume_file_url: urls[0],
+        parsed_at: new Date().toISOString(),
+      }
+    } else {
+      // Standard JSON profile format
+      profileData = {
+        user_id: finalUserId,
+        full_name: parsedProfile.personalInfo?.fullName || parsedProfile.fullName || '',
+        email: parsedProfile.personalInfo?.email || parsedProfile.email || '',
+        phone: parsedProfile.personalInfo?.phone || parsedProfile.phone || '',
+        location: parsedProfile.personalInfo?.address?.city || parsedProfile.location || '',
+        professional_summary: parsedProfile.professionalSummary || parsedProfile.professional_summary || '',
+        career_objective: parsedProfile.careerStats?.currentRole || parsedProfile.career_objective || '',
+        total_experience_years: parsedProfile.careerStats?.totalExperienceYears || parsedProfile.total_experience_years || 0,
+        work_experience: parsedProfile.workExperience || parsedProfile.work_experience || [],
+        education: parsedProfile.education || [],
+        technical_skills: parsedProfile.technical_skills || [
+          ...(parsedProfile.technicalSkills?.programmingLanguages || []),
+          ...(parsedProfile.technicalSkills?.frameworks || []),
+          ...(parsedProfile.technicalSkills?.databases || []),
+          ...(parsedProfile.technicalSkills?.aiTools || []),
+          ...(parsedProfile.technicalSkills?.other || [])
+        ],
+        languages: parsedProfile.languages?.map((l: any) =>
+          typeof l === 'string' ? l : `${l.language} (${l.proficiencyLevel})`
+        ) || [],
+        soft_skills: parsedProfile.softSkills || parsedProfile.soft_skills || [],
+        certifications: parsedProfile.certifications || [],
+        resume_file_url: urls[0], // Store first resume URL
+        parsed_at: new Date().toISOString(),
+      }
     }
 
     // Save to database using upsert (handles both INSERT and UPDATE)
