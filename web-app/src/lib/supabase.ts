@@ -418,6 +418,119 @@ export const db = {
     return data;
   },
 
+  // Saved Profiles operations (for job relevance analysis)
+  getSavedProfiles: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('saved_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  getActiveProfile: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('saved_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .single();
+
+    // Ignore "not found" error - user might not have active profile yet
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  },
+
+  saveProfile: async (userId: string, profileName: string | null, profileData: any, sourceResumes: string[] = []) => {
+    // Auto-generate profile name if not provided
+    const finalProfileName = profileName || `Profile ${new Date().toLocaleString('uk-UA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
+
+    const profileToSave = {
+      user_id: userId,
+      profile_name: finalProfileName,
+      profile_data: profileData,
+      source_resumes: sourceResumes,
+      total_resumes_analyzed: sourceResumes.length,
+      is_active: false, // Will be set to true if user activates it
+    };
+
+    const { data, error } = await supabase
+      .from('saved_profiles')
+      .insert(profileToSave)
+      .select()
+      .single();
+
+    if (error) {
+      // Handle duplicate profile name
+      if (error.code === '23505') {
+        throw new Error('Профіль з такою назвою вже існує. Оберіть іншу назву.');
+      }
+      throw error;
+    }
+
+    return data;
+  },
+
+  setActiveProfile: async (userId: string, profileId: string) => {
+    // First, get the profile to ensure it belongs to the user
+    const { data: profile, error: fetchError } = await supabase
+      .from('saved_profiles')
+      .select('*')
+      .eq('id', profileId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (!profile) throw new Error('Profile not found');
+
+    // The trigger function will automatically deactivate other profiles
+    const { data, error } = await supabase
+      .from('saved_profiles')
+      .update({ is_active: true })
+      .eq('id', profileId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  deleteProfile: async (profileId: string) => {
+    const { error } = await supabase
+      .from('saved_profiles')
+      .delete()
+      .eq('id', profileId);
+
+    if (error) throw error;
+  },
+
+  updateProfileName: async (profileId: string, newName: string) => {
+    const { data, error } = await supabase
+      .from('saved_profiles')
+      .update({ profile_name: newName })
+      .eq('id', profileId)
+      .select()
+      .single();
+
+    if (error) {
+      // Handle duplicate profile name
+      if (error.code === '23505') {
+        throw new Error('Профіль з такою назвою вже існує. Оберіть іншу назву.');
+      }
+      throw error;
+    }
+
+    return data;
+  },
+
   // Dashboard stats
   getDashboardStats: async (userId: string) => {
     const { data, error } = await supabase

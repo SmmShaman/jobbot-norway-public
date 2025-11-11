@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile, useAnalyzeResumes } from '@/hooks/useSettings';
-import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles } from 'lucide-react';
+import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile, useAnalyzeResumes, useSavedProfiles, useSaveProfile, useSetActiveProfile, useDeleteProfile } from '@/hooks/useSettings';
+import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles, Archive, Star } from 'lucide-react';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -13,10 +13,20 @@ export default function Settings() {
   const uploadResume = useUploadResume();
   const analyzeResumes = useAnalyzeResumes();
 
+  // Saved profiles hooks
+  const { data: savedProfiles, refetch: refetchSavedProfiles } = useSavedProfiles(user?.id || '');
+  const saveProfile = useSaveProfile();
+  const setActiveProfile = useSetActiveProfile();
+  const deleteProfile = useDeleteProfile();
+
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [extractedText, setExtractedText] = useState<string>('');
   const [isExtracting, setIsExtracting] = useState(false);
+
+  // Profile saving state
+  const [profileName, setProfileName] = useState<string>('');
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -188,6 +198,68 @@ export default function Settings() {
       alert('❌ Error saving Telegram settings');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handler to save current AI profile as a saved profile
+  const handleSaveCurrentProfile = async () => {
+    if (!user || !aiProfile) {
+      alert('❌ No AI profile to save. Please analyze your resumes first.');
+      return;
+    }
+
+    // Get source resumes from settings
+    const sourceResumes = settings?.resume_files || [];
+
+    setIsSaving(true);
+    try {
+      await saveProfile.mutateAsync({
+        userId: user.id,
+        profileName: profileName || null, // null will auto-generate name with timestamp
+        profileData: aiProfile,
+        sourceResumes: sourceResumes,
+      });
+
+      alert(`✅ Профіль "${profileName || 'автозбережено'}" успішно збережено!`);
+      setProfileName('');
+      setShowSaveDialog(false);
+      refetchSavedProfiles();
+    } catch (error: any) {
+      alert(`❌ Помилка збереження профілю: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handler to activate a saved profile
+  const handleActivateProfile = async (profileId: string) => {
+    if (!user) return;
+
+    try {
+      await setActiveProfile.mutateAsync({ userId: user.id, profileId });
+      alert('✅ Профіль активовано! Він буде використовуватися для оцінки вакансій.');
+      refetchSavedProfiles();
+    } catch (error: any) {
+      alert(`❌ Помилка активації профілю: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  // Handler to delete a saved profile
+  const handleDeleteSavedProfile = async (profileId: string, profileName: string) => {
+    if (!user) return;
+
+    const confirmed = window.confirm(
+      `⚠️ Ви впевнені, що хочете видалити профіль "${profileName}"?\n\nЦю дію не можна скасувати.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteProfile.mutateAsync({ profileId, userId: user.id });
+      alert('✅ Профіль видалено');
+      refetchSavedProfiles();
+    } catch (error: any) {
+      alert(`❌ Помилка видалення профілю: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -737,6 +809,156 @@ This profile will be used for automated job applications in Norway, so ensure:
                 <p className="text-sm text-gray-500">
                   Parsed at: {new Date(aiProfile.parsed_at).toLocaleString()}
                 </p>
+
+                {/* Save Profile Button */}
+                <div className="mt-6 border-t pt-4">
+                  {!showSaveDialog ? (
+                    <button
+                      onClick={() => setShowSaveDialog(true)}
+                      className="flex items-center gap-2 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <Archive className="w-5 h-5" />
+                      💾 Зберегти профіль
+                    </button>
+                  ) : (
+                    <div className="space-y-4 bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <h4 className="font-semibold text-purple-900">Збереження профілю</h4>
+                      <div>
+                        <label className="block text-sm font-medium text-purple-700 mb-2">
+                          Назва профілю (необов'язково)
+                        </label>
+                        <input
+                          type="text"
+                          value={profileName}
+                          onChange={(e) => setProfileName(e.target.value)}
+                          placeholder="Наприклад: Senior Frontend Developer або залиште порожнім для автоназви"
+                          className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                        <p className="text-xs text-purple-600 mt-1">
+                          💡 Якщо залишити порожнім, профіль буде збережено з поточною датою та часом
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSaveCurrentProfile}
+                          disabled={isSaving}
+                          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                        >
+                          <Save className="w-4 h-4" />
+                          {isSaving ? 'Збереження...' : 'Зберегти'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowSaveDialog(false);
+                            setProfileName('');
+                          }}
+                          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Скасувати
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Saved Profiles List */}
+            {savedProfiles && savedProfiles.length > 0 && (
+              <div className="mt-8 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Archive className="w-5 h-5 text-purple-600" />
+                  Збережені профілі ({savedProfiles.length})
+                </h3>
+
+                <div className="space-y-3">
+                  {savedProfiles.map((savedProfile: any) => (
+                    <div
+                      key={savedProfile.id}
+                      className={`bg-white border rounded-lg p-4 ${
+                        savedProfile.is_active
+                          ? 'border-green-500 shadow-md'
+                          : 'border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-gray-900">
+                              {savedProfile.profile_name}
+                            </h4>
+                            {savedProfile.is_active && (
+                              <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                <Star className="w-3 h-3 fill-current" />
+                                Активний
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p>
+                              📄 Резюме: {savedProfile.total_resumes_analyzed} шт.
+                            </p>
+                            <p>
+                              🗓️ Створено: {new Date(savedProfile.created_at).toLocaleString('uk-UA')}
+                            </p>
+                            {savedProfile.description && (
+                              <p className="text-gray-500 italic">{savedProfile.description}</p>
+                            )}
+                          </div>
+
+                          {/* Profile data preview */}
+                          {savedProfile.profile_data && (
+                            <div className="mt-3 p-3 bg-gray-50 rounded text-xs space-y-1">
+                              {savedProfile.profile_data.full_name && (
+                                <p><strong>Ім'я:</strong> {savedProfile.profile_data.full_name}</p>
+                              )}
+                              {savedProfile.profile_data.professional_summary && (
+                                <p className="text-gray-600 line-clamp-2">
+                                  {savedProfile.profile_data.professional_summary}
+                                </p>
+                              )}
+                              {savedProfile.profile_data.technical_skills && savedProfile.profile_data.technical_skills.length > 0 && (
+                                <p>
+                                  <strong>Навички:</strong> {savedProfile.profile_data.technical_skills.slice(0, 5).join(', ')}
+                                  {savedProfile.profile_data.technical_skills.length > 5 && '...'}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2 ml-4">
+                          {!savedProfile.is_active && (
+                            <button
+                              onClick={() => handleActivateProfile(savedProfile.id)}
+                              className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"
+                              title="Активувати цей профіль для оцінки вакансій"
+                            >
+                              <Star className="w-4 h-4" />
+                              Активувати
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteSavedProfile(savedProfile.id, savedProfile.profile_name)}
+                            className="flex items-center gap-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Видалити
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    ℹ️ <strong>Як це працює:</strong> Активний профіль використовується AI для оцінки релевантності вакансій.
+                    Ви можете зберігати різні версії профілів для різних типів вакансій (наприклад, Frontend, Backend, Full-stack)
+                    і перемикатися між ними.
+                  </p>
+                </div>
               </div>
             )}
           </div>

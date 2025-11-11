@@ -80,3 +80,104 @@ export const useAnalyzeResumes = () => {
     },
   });
 };
+
+// ============================================================
+// SAVED PROFILES HOOKS (for job relevance analysis)
+// ============================================================
+
+// Get all saved profiles for user
+export const useSavedProfiles = (userId: string) => {
+  return useQuery({
+    queryKey: ['savedProfiles', userId],
+    queryFn: () => db.getSavedProfiles(userId),
+    enabled: !!userId,
+  });
+};
+
+// Get active profile (used for job relevance scoring)
+export const useActiveProfile = (userId: string) => {
+  return useQuery({
+    queryKey: ['activeProfile', userId],
+    queryFn: () => db.getActiveProfile(userId),
+    enabled: !!userId,
+  });
+};
+
+// Save current profile with optional name
+export const useSaveProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      profileName,
+      profileData,
+      sourceResumes,
+    }: {
+      userId: string;
+      profileName: string | null;
+      profileData: any;
+      sourceResumes: string[];
+    }) => {
+      const result = await db.saveProfile(userId, profileName, profileData, sourceResumes);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['savedProfiles', variables.userId] });
+    },
+  });
+};
+
+// Set active profile (only one can be active at a time)
+export const useSetActiveProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ userId, profileId }: { userId: string; profileId: string }) => {
+      const result = await db.setActiveProfile(userId, profileId);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['savedProfiles', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['activeProfile', variables.userId] });
+    },
+  });
+};
+
+// Delete saved profile
+export const useDeleteProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ profileId, userId }: { profileId: string; userId: string }) => {
+      await db.deleteProfile(profileId);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['savedProfiles', variables.userId] });
+      queryClient.invalidateQueries({ queryKey: ['activeProfile', variables.userId] });
+    },
+  });
+};
+
+// Update profile name
+export const useUpdateProfileName = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      profileId,
+      newName,
+      userId,
+    }: {
+      profileId: string;
+      newName: string;
+      userId: string;
+    }) => {
+      const result = await db.updateProfileName(profileId, newName);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['savedProfiles', variables.userId] });
+    },
+  });
+};
