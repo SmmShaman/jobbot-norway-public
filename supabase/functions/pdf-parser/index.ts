@@ -283,29 +283,17 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
   const data = await response.json()
   const content = data.choices[0].message.content
 
-  // If using custom prompts, return raw content (might not be JSON)
+  // If using custom prompts, ALWAYS return raw content (preserve user's structure)
   if (customUserPromptPrefix) {
-    console.log('🎨 Custom prompt mode: Attempting to parse AI response')
+    console.log('🎨 Custom prompt mode: Returning RAW AI response')
     console.log('Response preview (first 500 chars):', content.substring(0, 500))
 
-    try {
-      // Try to parse as JSON first
-      const cleanedContent = content
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim()
-
-      const parsed = JSON.parse(cleanedContent)
-      console.log('✅ Successfully parsed as JSON')
-      return parsed
-    } catch (e) {
-      console.log('⚠️  Not valid JSON, returning as structured text response')
-      // Return as a structured object with raw content
-      return {
-        rawResponse: content,
-        customPromptUsed: true,
-        note: 'This is a custom prompt response, not standard JSON profile format'
-      }
+    // ALWAYS return as raw response for custom prompts
+    // Even if it's valid JSON, we want to preserve the exact structure user requested
+    return {
+      rawResponse: content,
+      customPromptUsed: true,
+      note: 'Custom prompt response - preserving exact AI output'
     }
   }
 
