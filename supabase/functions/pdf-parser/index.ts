@@ -199,9 +199,44 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
 
   // Use custom system prompt if provided, otherwise use default
   const systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
+  const finalUserPrompt = customUserPromptPrefix ? userPrompt : userPrompt
 
-  console.log('System prompt length:', systemPrompt.length, 'chars')
-  console.log('User prompt length:', userPrompt.length, 'chars')
+  // ============ DETAILED LOGGING FOR DEBUGGING ============
+  console.log('========================================')
+  console.log('📋 AI PROMPTS BEING SENT TO AZURE OPENAI:')
+  console.log('========================================')
+
+  console.log('🔧 Custom prompts from DB:')
+  console.log('  - customSystemPrompt exists:', !!customSystemPrompt)
+  console.log('  - customUserPromptPrefix exists:', !!customUserPromptPrefix)
+
+  if (customSystemPrompt) {
+    console.log('\n✏️ USING CUSTOM SYSTEM PROMPT:')
+    console.log('First 300 chars:', customSystemPrompt.substring(0, 300) + '...')
+  } else {
+    console.log('\n📄 USING DEFAULT SYSTEM PROMPT')
+    console.log('First 300 chars:', ENHANCED_PROMPT_SYSTEM.substring(0, 300) + '...')
+  }
+
+  if (customUserPromptPrefix) {
+    console.log('\n✏️ CUSTOM USER PROMPT PREFIX:')
+    console.log('First 300 chars:', customUserPromptPrefix.substring(0, 300) + '...')
+  } else {
+    console.log('\n📄 USING DEFAULT USER PROMPT PREFIX')
+  }
+
+  console.log('\n📊 FINAL PROMPTS STATS:')
+  console.log('  - System prompt length:', systemPrompt.length, 'chars')
+  console.log('  - User prompt length:', finalUserPrompt.length, 'chars')
+  console.log('  - Total prompt length:', systemPrompt.length + finalUserPrompt.length, 'chars')
+
+  console.log('\n🚀 SENDING TO AZURE OPENAI:')
+  console.log('  - Endpoint:', azureEndpoint)
+  console.log('  - Deployment:', deploymentName)
+  console.log('  - Temperature: 0.3')
+  console.log('  - Max tokens: 8000')
+  console.log('========================================')
+  // ============ END LOGGING ============
 
   const response = await fetch(
     `${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`,
@@ -214,7 +249,7 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
       body: JSON.stringify({
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: 'user', content: finalUserPrompt }
         ],
         temperature: 0.3,
         max_tokens: 8000,
