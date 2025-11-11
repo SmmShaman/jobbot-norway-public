@@ -15,6 +15,8 @@ export default function Settings() {
 
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
+  const [extractedText, setExtractedText] = useState<string>('');
+  const [isExtracting, setIsExtracting] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -474,17 +476,91 @@ export default function Settings() {
                   ) : null}
                 </div>
 
+                {/* Extract Text Button */}
+                <button
+                  onClick={async () => {
+                    if (!user || !settings) return;
+                    setIsExtracting(true);
+                    try {
+                      const resumeFiles = settings.resume_files || (settings.resume_storage_path ? [settings.resume_storage_path] : []);
+
+                      if (resumeFiles.length === 0) {
+                        alert('❌ Немає завантажених резюме');
+                        return;
+                      }
+
+                      console.log(`Витягую текст з ${resumeFiles.length} резюме...`);
+
+                      // Витягти текст з кожного PDF
+                      const textsPromises = resumeFiles.map(async (filePath: string) => {
+                        const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${filePath}`;
+                        const response = await fetch(url);
+                        const blob = await response.blob();
+                        const text = await blob.text();
+                        return `\n\n=== РЕЗЮМЕ: ${filePath.split('/').pop()} ===\n${text}\n=== КІНЕЦЬ ===\n`;
+                      });
+
+                      const allTexts = await Promise.all(textsPromises);
+                      const combinedText = allTexts.join('\n\n---\n\n');
+
+                      setExtractedText(combinedText);
+                      console.log(`Витягнуто ${combinedText.length} символів`);
+                      alert(`✅ Текст витягнуто! Знайдено ${combinedText.length} символів з ${resumeFiles.length} резюме`);
+                    } catch (error: any) {
+                      console.error('Помилка витягування:', error);
+                      alert('❌ Помилка витягування тексту: ' + error.message);
+                    } finally {
+                      setIsExtracting(false);
+                    }
+                  }}
+                  disabled={isExtracting}
+                  className="w-full mt-4 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
+                >
+                  <FileText className="w-5 h-5" />
+                  {isExtracting ? 'Витягую текст...' : `📝 Витягти текст з усіх ${settings.resume_files?.length || 1} резюме`}
+                </button>
+
+                {/* Extracted Text Display */}
+                {extractedText && (
+                  <div className="mt-4 bg-gray-50 border border-gray-300 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-semibold text-gray-900">📄 Витягнутий текст ({extractedText.length} символів)</h4>
+                      <button
+                        onClick={() => setExtractedText('')}
+                        className="text-xs text-gray-600 hover:text-red-600"
+                      >
+                        ✕ Очистити
+                      </button>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded p-3 max-h-96 overflow-y-auto">
+                      <pre className="text-xs font-mono whitespace-pre-wrap text-gray-700">
+                        {extractedText}
+                      </pre>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Цей текст буде відправлений в AI для аналізу
+                    </p>
+                  </div>
+                )}
+
                 {/* Analyze Button */}
                 <button
                   onClick={async () => {
                     if (!user) return;
+
+                    // Якщо текст не витягнуто, попередити
+                    if (!extractedText) {
+                      const confirm = window.confirm('⚠️ Текст ще не витягнуто!\n\nСпочатку натисніть "📝 Витягти текст з усіх резюме" щоб переглянути що буде відправлено в AI.\n\nАбо продовжити аналіз зараз (Edge Function витягне текст автоматично з unpdf)?');
+                      if (!confirm) return;
+                    }
+
                     setIsSaving(true);
                     try {
                       await analyzeResumes.mutateAsync({ userId: user.id });
                       await refetchAIProfile();
-                      alert('✅ Resumes analyzed successfully!');
+                      alert('✅ Резюме проаналізовані успішно!\n\nПерейдіть вниз щоб побачити AI-витягнуті дані.');
                     } catch (error: any) {
-                      alert('❌ Analysis error: ' + error.message);
+                      alert('❌ Помилка аналізу: ' + error.message);
                     } finally {
                       setIsSaving(false);
                     }
@@ -493,11 +569,13 @@ export default function Settings() {
                   className="w-full mt-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
                 >
                   <Sparkles className="w-5 h-5" />
-                  {isSaving ? 'Аналізую резюме...' : `Аналізувати всі ${settings.resume_files?.length || 1} резюме з AI`}
+                  {isSaving ? 'Аналізую резюме з AI...' : `✨ Аналізувати ${extractedText ? 'витягнутий текст' : `всі ${settings.resume_files?.length || 1} резюме`} з AI`}
                 </button>
 
                 <p className="text-xs text-gray-500 mt-2 text-center">
-                  🤖 AI об'єднає інформацію з усіх резюме в один профіль
+                  {extractedText
+                    ? '🤖 AI проаналізує витягнутий текст і створить профіль'
+                    : '🤖 Рекомендується спочатку витягнути текст для перегляду'}
                 </p>
               </div>
             )}
