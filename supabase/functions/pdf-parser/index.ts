@@ -86,7 +86,7 @@ async function parseMultipleResumesWithAI(
   resumes: Array<{ content: string; filename: string }>,
   currentUser: string,
   customSystemPrompt?: string,
-  customUserPromptPrefix?: string
+  customUserPrompt?: string
 ): Promise<any> {
   const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')!
   const azureApiKey = Deno.env.get('AZURE_OPENAI_API_KEY')!
@@ -112,12 +112,12 @@ ${resume.content}
   let systemPrompt: string
   let finalUserPrompt: string
 
-  if (customUserPromptPrefix) {
+  if (customUserPrompt) {
     // USER CUSTOM MODE: Use ONLY custom prompts without any defaults
     systemPrompt = customSystemPrompt || ENHANCED_PROMPT_SYSTEM
 
     // Build simple user prompt with ONLY custom instructions
-    finalUserPrompt = `${customUserPromptPrefix}
+    finalUserPrompt = `${customUserPrompt}
 
 INPUT DATA - ${resumes.length} RESUME FILES:
 ${detailedResumeText}`
@@ -228,9 +228,9 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
   console.log('📋 AI PROMPTS BEING SENT TO AZURE OPENAI:')
   console.log('========================================')
 
-  console.log('🔧 Prompt Mode:', customUserPromptPrefix ? '🎨 CUSTOM (User-defined)' : '📋 DEFAULT (JSON structure)')
+  console.log('🔧 Prompt Mode:', customUserPrompt ? '🎨 CUSTOM (User-defined)' : '📋 DEFAULT (JSON structure)')
   console.log('  - customSystemPrompt exists:', !!customSystemPrompt)
-  console.log('  - customUserPromptPrefix exists:', !!customUserPromptPrefix)
+  console.log('  - customUserPrompt exists:', !!customUserPrompt)
 
   console.log('\n✏️ SYSTEM PROMPT:')
   console.log('First 300 chars:', systemPrompt.substring(0, 300) + '...')
@@ -238,7 +238,7 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
   console.log('\n✏️ USER PROMPT:')
   console.log('First 500 chars:', finalUserPrompt.substring(0, 500) + '...')
 
-  if (customUserPromptPrefix) {
+  if (customUserPrompt) {
     console.log('\n⚠️  IMPORTANT: Custom prompt mode - NO default JSON structure enforced')
     console.log('AI will follow ONLY the custom instructions provided by user')
   }
@@ -284,7 +284,7 @@ CRITICAL: Return ONLY the complete JSON object with ALL fields populated. Combin
   const content = data.choices[0].message.content
 
   // If using custom prompts, ALWAYS return raw content (preserve user's structure)
-  if (customUserPromptPrefix) {
+  if (customUserPrompt) {
     console.log('🎨 Custom prompt mode: Returning RAW AI response')
     console.log('Response preview (first 500 chars):', content.substring(0, 500))
 
