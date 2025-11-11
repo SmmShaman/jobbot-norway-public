@@ -489,23 +489,19 @@ export default function Settings() {
                         return;
                       }
 
-                      console.log(`Витягую текст з ${resumeFiles.length} резюме...`);
+                      console.log(`Витягую текст з ${resumeFiles.length} резюме з unpdf...`);
 
-                      // Витягти текст з кожного PDF
-                      const textsPromises = resumeFiles.map(async (filePath: string) => {
-                        const url = `https://ptrmidlhfdbybxmyovtm.supabase.co/storage/v1/object/public/resumes/${filePath}`;
-                        const response = await fetch(url);
-                        const blob = await response.blob();
-                        const text = await blob.text();
-                        return `\n\n=== РЕЗЮМЕ: ${filePath.split('/').pop()} ===\n${text}\n=== КІНЕЦЬ ===\n`;
-                      });
+                      // Викликаємо Edge Function з unpdf для якісного парсингу
+                      const { storage } = await import('@/lib/supabase');
+                      const result = await storage.extractTextFromResumes(user.id);
 
-                      const allTexts = await Promise.all(textsPromises);
-                      const combinedText = allTexts.join('\n\n---\n\n');
+                      setExtractedText(result.combinedText);
+                      console.log('Результат витягування:', result.stats);
 
-                      setExtractedText(combinedText);
-                      console.log(`Витягнуто ${combinedText.length} символів`);
-                      alert(`✅ Текст витягнуто! Знайдено ${combinedText.length} символів з ${resumeFiles.length} резюме`);
+                      alert(`✅ Текст витягнуто з unpdf!\n\n` +
+                            `📊 Резюме: ${result.stats.successCount}/${result.stats.totalResumes}\n` +
+                            `📝 Символів: ${result.stats.totalCharacters.toLocaleString()}\n` +
+                            `❌ Помилок: ${result.stats.failedCount}`);
                     } catch (error: any) {
                       console.error('Помилка витягування:', error);
                       alert('❌ Помилка витягування тексту: ' + error.message);
@@ -517,7 +513,7 @@ export default function Settings() {
                   className="w-full mt-4 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold"
                 >
                   <FileText className="w-5 h-5" />
-                  {isExtracting ? 'Витягую текст...' : `📝 Витягти текст з усіх ${settings.resume_files?.length || 1} резюме`}
+                  {isExtracting ? 'Витягую текст з unpdf...' : `📝 Витягти ЯКІСНИЙ текст з усіх ${settings.resume_files?.length || 1} резюме (unpdf)`}
                 </button>
 
                 {/* Extracted Text Display */}

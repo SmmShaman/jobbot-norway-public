@@ -171,6 +171,51 @@ export const storage = {
     return parseResult;
   },
 
+  // NEW: Extract text from resumes using unpdf (preview only, no AI)
+  extractTextFromResumes: async (userId: string) => {
+    // Get all resume files
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('resume_files, resume_storage_path')
+      .eq('user_id', userId)
+      .single();
+
+    const resumeFiles = settings?.resume_files || (settings?.resume_storage_path ? [settings.resume_storage_path] : []);
+
+    if (resumeFiles.length === 0) {
+      throw new Error('No resumes uploaded');
+    }
+
+    // Get public URLs for all files
+    const resumeUrls = resumeFiles.map((fileName: string) => {
+      const { data } = supabase.storage.from('resumes').getPublicUrl(fileName);
+      return data.publicUrl;
+    });
+
+    console.log(`Extracting text from ${resumeFiles.length} resumes with unpdf...`);
+
+    // Call Extract Text Edge Function (uses unpdf)
+    const { data: extractResult, error: extractError } = await supabase.functions.invoke('extract-text', {
+      body: {
+        user_id: userId,
+        resume_urls: resumeUrls,
+      },
+    });
+
+    if (extractError) {
+      console.error('Text extraction failed:', extractError);
+      throw new Error('Failed to extract text: ' + (extractError.message || JSON.stringify(extractError)));
+    }
+
+    if (!extractResult || !extractResult.success) {
+      console.error('Extract result failed:', extractResult);
+      throw new Error('Text extraction failed: ' + (extractResult?.error || 'Unknown error'));
+    }
+
+    console.log('Text extracted successfully:', extractResult.stats);
+    return extractResult;
+  },
+
   getResumeUrl: async (path: string) => {
     const { data } = await supabase.storage
       .from('resumes')
