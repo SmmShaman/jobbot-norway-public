@@ -734,20 +734,37 @@ This profile will be used for automated job applications in Norway, so ensure:
                   AI-Extracted Profile Data
                 </h3>
 
-                <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                  {aiProfile.full_name && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Full Name</label>
-                      <p className="text-gray-900">{aiProfile.full_name}</p>
+                {/* Check if this is a custom prompt response */}
+                {aiProfile.career_objective === 'Custom AI Profile Analysis' && aiProfile.professional_summary ? (
+                  <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
+                    <div className="mb-4 flex items-center gap-2">
+                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
+                        🎨 Custom AI Analysis
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        Generated using your custom prompt structure
+                      </span>
                     </div>
-                  )}
 
-                  {aiProfile.professional_summary && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-600">Professional Summary</label>
-                      <p className="text-gray-900">{aiProfile.professional_summary}</p>
+                    <div className="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto">
+                      <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800">{aiProfile.professional_summary}</pre>
                     </div>
-                  )}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                    {aiProfile.full_name && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Full Name</label>
+                        <p className="text-gray-900">{aiProfile.full_name}</p>
+                      </div>
+                    )}
+
+                    {aiProfile.professional_summary && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Professional Summary</label>
+                        <p className="text-gray-900">{aiProfile.professional_summary}</p>
+                      </div>
+                    )}
 
                   {aiProfile.total_experience_years > 0 && (
                     <div>
@@ -804,7 +821,8 @@ This profile will be used for automated job applications in Norway, so ensure:
                       </div>
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
 
                 <p className="text-sm text-gray-500">
                   Parsed at: {new Date(aiProfile.parsed_at).toLocaleString()}
