@@ -149,7 +149,7 @@ export const useDeleteProfile = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ profileId, userId }: { profileId: string; userId: string }) => {
+    mutationFn: async ({ profileId }: { profileId: string; userId: string }) => {
       await db.deleteProfile(profileId);
     },
     onSuccess: (_, variables) => {
@@ -167,7 +167,6 @@ export const useUpdateProfileName = () => {
     mutationFn: async ({
       profileId,
       newName,
-      userId,
     }: {
       profileId: string;
       newName: string;
