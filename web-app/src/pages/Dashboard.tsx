@@ -74,8 +74,9 @@ export default function Dashboard() {
 
       if (data.success) {
         alert(`✅ Extracted details for ${data.jobsScraped} job(s)!\n\n` +
-              `Saved: ${data.jobsSaved} new\n` +
-              `Updated: ${data.jobsSkipped} existing`);
+              `Created: ${data.jobsSaved} new\n` +
+              `Updated: ${data.jobsUpdated} existing\n` +
+              `Unchanged: ${data.jobsSkipped} skipped`);
 
         // Refresh jobs list
         window.location.reload();

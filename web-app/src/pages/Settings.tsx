@@ -186,17 +186,19 @@ export default function Settings() {
       // Aggregate results
       const totalScraped = results.reduce((sum, r) => sum + (r.jobsScraped || 0), 0);
       const totalSaved = results.reduce((sum, r) => sum + (r.jobsSaved || 0), 0);
+      const totalUpdated = results.reduce((sum, r) => sum + (r.jobsUpdated || 0), 0);
       const totalSkipped = results.reduce((sum, r) => sum + (r.jobsSkipped || 0), 0);
 
       setScrapeResults({
         success: true,
         totalScraped,
         totalSaved,
+        totalUpdated,
         totalSkipped,
         results,
       });
 
-      alert(`✅ Scraping complete!\n\nFound: ${totalScraped} jobs\nSaved: ${totalSaved} new\nSkipped: ${totalSkipped} duplicates`);
+      alert(`✅ Scraping complete!\n\nScraped: ${totalScraped} jobs\nCreated: ${totalSaved} new\nUpdated: ${totalUpdated} existing\nUnchanged: ${totalSkipped} skipped`);
     } catch (error: any) {
       console.error('Scrape error:', error);
       alert('❌ Error scraping jobs. Check console for details.');

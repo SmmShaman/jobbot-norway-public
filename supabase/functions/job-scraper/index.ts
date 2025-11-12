@@ -86,6 +86,112 @@ async function extractJobUrlsFromSearchPage(searchUrl: string): Promise<string[]
 }
 
 /**
+ * Extract job details using Azure OpenAI GPT-4
+ * More reliable than CSS selectors which break when FINN.no changes structure
+ */
+async function extractJobDetailsWithAI(html: string, jobUrl: string): Promise<JobListing> {
+  console.log('🤖 Using AI to extract job details from:', jobUrl)
+
+  const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')!
+  const azureApiKey = Deno.env.get('AZURE_OPENAI_API_KEY')!
+  const deploymentName = Deno.env.get('AZURE_OPENAI_DEPLOYMENT') || 'gpt-4'
+
+  // Parse HTML to get clean text
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  const bodyText = document.body?.textContent || html
+
+  const systemPrompt = `You are an expert at extracting structured job posting information from HTML pages.
+Extract ONLY the actual job posting content, removing all navigation, breadcrumbs, footers, and UI elements.
+
+Return a JSON object with these exact fields:
+{
+  "title": "Job title",
+  "company": "Company name (NOT breadcrumb text like 'Her er du')",
+  "location": "City and postal code (e.g. '2850 Lena' or 'Oslo')",
+  "description": "Clean job description without HTML tags, navigation, or UI elements. Include responsibilities, qualifications, benefits.",
+  "contact_person": "Name and title of contact person, if mentioned",
+  "contact_email": "Contact email address, if mentioned",
+  "contact_phone": "Contact phone number, if mentioned (format: +47 XXX XX XXX)",
+  "deadline": "Application deadline date, if mentioned (e.g. '25.11.2025')"
+}
+
+IMPORTANT:
+- Extract ONLY actual job content, not website navigation or UI
+- Company should be the employer name, NOT breadcrumb text
+- Description should be clean prose, not HTML or navigation text
+- Set fields to null if not found (don't guess or make up information)
+- Keep Norwegian text as-is, don't translate`
+
+  const userPrompt = `Extract structured job information from this FINN.no job posting page.
+
+URL: ${jobUrl}
+
+PAGE CONTENT:
+${bodyText.substring(0, 15000)}
+
+Return ONLY valid JSON, no additional text.`
+
+  try {
+    const response = await fetch(
+      `${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-08-01-preview`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': azureApiKey,
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.1,
+          max_tokens: 2000,
+          response_format: { type: 'json_object' },
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ Azure OpenAI error:', response.status, errorText)
+      throw new Error(`Azure OpenAI API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const extractedData = JSON.parse(data.choices[0].message.content)
+
+    console.log('✅ AI extracted job details:', {
+      title: extractedData.title,
+      company: extractedData.company,
+      location: extractedData.location,
+      hasDescription: !!extractedData.description,
+      hasContact: !!(extractedData.contact_person || extractedData.contact_email || extractedData.contact_phone)
+    })
+
+    const jobListing: JobListing = {
+      title: extractedData.title || 'Unknown Title',
+      company: extractedData.company || 'Unknown Company',
+      location: extractedData.location || 'Unknown Location',
+      url: jobUrl,
+      source: 'FINN',
+      description: extractedData.description || undefined,
+      contact_person: extractedData.contact_person || undefined,
+      contact_email: extractedData.contact_email || undefined,
+      contact_phone: extractedData.contact_phone || undefined,
+      deadline: extractedData.deadline || undefined,
+      posted_date: undefined,
+    }
+
+    return jobListing
+
+  } catch (error) {
+    console.error('❌ AI extraction failed:', error)
+    throw new Error(`Failed to extract job details with AI: ${error.message}`)
+  }
+}
+
+/**
  * Extracts detailed information from a single job listing page
  */
 async function extractJobDetails(jobUrl: string): Promise<JobListing> {
@@ -102,130 +208,13 @@ async function extractJobDetails(jobUrl: string): Promise<JobListing> {
   }
 
   const html = await response.text()
-  const document = new DOMParser().parseFromString(html, 'text/html')
 
-  // Extract job details (FINN.no 2025 structure)
-  const title = document.querySelector('h1')?.textContent?.trim() || 'Unknown Title'
-
-  // Extract company from JSON-LD structured data (most reliable)
-  let company = 'Unknown Company'
-  const scriptTags = document.querySelectorAll('script[type="application/ld+json"]')
-  for (const script of Array.from(scriptTags)) {
-    try {
-      const data = JSON.parse(script.textContent || '{}')
-      if (data['@type'] === 'JobPosting' && data.hiringOrganization?.name) {
-        company = data.hiringOrganization.name
-        break
-      }
-    } catch (e) {
-      // Skip invalid JSON
-    }
-  }
-
-  // Fallback: look for strong tag near "Arbeidsgiver" or similar
-  if (company === 'Unknown Company') {
-    const strongTags = document.querySelectorAll('strong')
-    for (const strong of Array.from(strongTags)) {
-      const text = strong.textContent?.trim() || ''
-      // Skip breadcrumbs and navigation
-      if (text.length > 2 && text.length < 100 &&
-          !text.includes('Her er du') &&
-          !text.includes('FINN') &&
-          !text.includes('Jobb')) {
-        company = text
-        break
-      }
-    }
-  }
-
-  // Location is in dd elements, look for one with address pattern
-  const ddElements = document.querySelectorAll('dd')
-  let location = 'Unknown Location'
-  for (const dd of Array.from(ddElements)) {
-    const text = dd.textContent?.trim() || ''
-    // Look for Norwegian postal codes (4 digits followed by city name)
-    if (/\d{4}\s+[A-ZÆØÅ]/.test(text)) {
-      location = text
-      break
-    }
-  }
-
-  // Fallback to any dd that looks like an address
-  if (location === 'Unknown Location') {
-    for (const dd of Array.from(ddElements)) {
-      const text = dd.textContent?.trim() || ''
-      if (text.length > 5 && text.length < 100 && !text.includes('@')) {
-        location = text
-        break
-      }
-    }
-  }
-
-  // Extract description from li elements
-  const listItems = document.querySelectorAll('li')
-  const descriptionParts: string[] = []
-  for (const li of Array.from(listItems)) {
-    const text = li.textContent?.trim()
-    if (text && text.length > 10 && !text.includes('Frist')) {
-      descriptionParts.push(text)
-    }
-  }
-  const description = descriptionParts.slice(0, 20).join('\n').substring(0, 5000)
-
-  // Extract contact person from dt/dd pairs
-  let contactPerson: string | undefined
-  const dtElements = document.querySelectorAll('dt')
-  for (const dt of Array.from(dtElements)) {
-    if (dt.textContent?.includes('Kontaktperson')) {
-      const dd = dt.nextElementSibling
-      if (dd && dd.tagName === 'DD') {
-        contactPerson = dd.textContent?.trim()
-        break
-      }
-    }
-  }
-
-  // Extract email (look for mailto links or email pattern)
-  const contactEmail = document.querySelector('a[href^="mailto:"]')?.getAttribute('href')?.replace('mailto:', '') ||
-                       html.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/)?.[1]
-
-  // Extract phone (look for Norwegian phone format)
-  const contactPhone = document.querySelector('a[href^="tel:"]')?.textContent?.trim() ||
-                       html.match(/(\+47[\s\d]{8,12})/)?.[1]
-
-  // Extract deadline (look for "Frist" in li elements)
-  let deadline: string | undefined
-  for (const li of Array.from(listItems)) {
-    const text = li.textContent?.trim() || ''
-    if (text.includes('Frist')) {
-      deadline = text.replace('Frist', '').trim()
-      break
-    }
-  }
-
-  // Extract posted date (not easily available)
-  const postedDate: string | undefined = undefined
-
-  const jobListing: JobListing = {
-    title,
-    company,
-    location,
-    url: jobUrl,
-    source: 'FINN',
-    description,
-    contact_person: contactPerson,
-    contact_email: contactEmail,
-    contact_phone: contactPhone,
-    deadline,
-    posted_date: postedDate,
-  }
-
-  console.log('✅ Extracted job details:', { title, company, location })
-  return jobListing
+  // Use AI to extract job details (more reliable than selectors)
+  return await extractJobDetailsWithAI(html, jobUrl)
 }
 
 /**
- * Save job to database
+ * Save job to database (insert new or update existing)
  */
 async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobListing) {
   console.log('💾 Saving job to database:', job.title)
@@ -239,8 +228,31 @@ async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobLi
     .single()
 
   if (existing) {
-    console.log('⚠️  Job already exists, skipping:', job.url)
-    return { id: existing.id, created: false }
+    console.log('🔄 Job already exists, updating with new details:', job.url)
+
+    // Update existing job with fresh data
+    const { error: updateError } = await supabaseClient
+      .from('jobs')
+      .update({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        contact_person: job.contact_person,
+        contact_email: job.contact_email,
+        contact_phone: job.contact_phone,
+        deadline: job.deadline,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+
+    if (updateError) {
+      console.error('❌ Database update error:', updateError)
+      throw updateError
+    }
+
+    console.log('✅ Job updated with ID:', existing.id)
+    return { id: existing.id, created: false, updated: true }
   }
 
   // Insert new job
@@ -265,12 +277,12 @@ async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobLi
     .single()
 
   if (error) {
-    console.error('❌ Database error:', error)
+    console.error('❌ Database insert error:', error)
     throw error
   }
 
-  console.log('✅ Job saved with ID:', data.id)
-  return { id: data.id, created: true }
+  console.log('✅ Job created with ID:', data.id)
+  return { id: data.id, created: true, updated: false }
 }
 
 serve(async (req) => {
@@ -296,6 +308,7 @@ serve(async (req) => {
       jobUrlsExtracted: 0,
       jobsScraped: 0,
       jobsSaved: 0,
+      jobsUpdated: 0,
       jobsSkipped: 0,
       jobs: [] as any[],
     }
@@ -318,6 +331,9 @@ serve(async (req) => {
 
           if (saveResult.created) {
             results.jobsSaved++
+            results.jobs.push({ id: saveResult.id, ...jobDetails })
+          } else if (saveResult.updated) {
+            results.jobsUpdated++
             results.jobs.push({ id: saveResult.id, ...jobDetails })
           } else {
             results.jobsSkipped++
@@ -346,6 +362,9 @@ serve(async (req) => {
           if (saveResult.created) {
             results.jobsSaved++
             results.jobs.push({ id: saveResult.id, ...jobDetails })
+          } else if (saveResult.updated) {
+            results.jobsUpdated++
+            results.jobs.push({ id: saveResult.id, ...jobDetails })
           } else {
             results.jobsSkipped++
           }
@@ -363,7 +382,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         ...results,
-        message: `Scraped ${results.jobsScraped} jobs, saved ${results.jobsSaved} new, skipped ${results.jobsSkipped} duplicates`,
+        message: `Scraped ${results.jobsScraped} jobs: ${results.jobsSaved} new, ${results.jobsUpdated} updated, ${results.jobsSkipped} unchanged`,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
