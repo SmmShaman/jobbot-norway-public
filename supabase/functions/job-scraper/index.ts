@@ -186,7 +186,7 @@ async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobLi
       contact_phone: job.contact_phone,
       deadline: job.deadline,
       status: 'NEW',
-      scraped_at: new Date().toISOString(),
+      discovered_at: new Date().toISOString(),
     })
     .select('id')
     .single()
