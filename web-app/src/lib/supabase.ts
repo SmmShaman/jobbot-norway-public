@@ -533,14 +533,33 @@ export const db = {
 
   // Dashboard stats
   getDashboardStats: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_dashboard_stats')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Query jobs table directly for accurate counts
+    const { data: jobs, error: jobsError } = await supabase
+      .from('jobs')
+      .select('id, status, relevance_score')
+      .eq('user_id', userId);
 
-    if (error) throw error;
-    return data;
+    if (jobsError) throw jobsError;
+
+    // Query applications table for counts
+    const { data: applications, error: appsError } = await supabase
+      .from('applications')
+      .select('id, status')
+      .eq('user_id', userId);
+
+    // Ignore error if applications table doesn't exist yet
+    const appsCount = applications?.length || 0;
+
+    // Calculate stats from jobs
+    const totalJobs = jobs?.length || 0;
+    const relevantJobs = jobs?.filter(j => j.status === 'RELEVANT' || (j.relevance_score && j.relevance_score >= 70)).length || 0;
+
+    return {
+      total_jobs: totalJobs,
+      relevant_jobs: relevantJobs,
+      total_applications: appsCount,
+      nav_reports: 0, // Legacy field, keep for compatibility
+    };
   },
 
   // Monitoring logs

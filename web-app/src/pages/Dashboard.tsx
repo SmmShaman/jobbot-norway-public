@@ -1,13 +1,12 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useDashboardStats, useMonitoringLogs } from '@/hooks/useDashboard';
+import { useDashboardStats } from '@/hooks/useDashboard';
 import { useScanJobs, useJobs } from '@/hooks/useJobs';
-import { Briefcase, CheckCircle, Clock, FileText, PlayCircle, ExternalLink, Download } from 'lucide-react';
+import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
-  const { data: logs } = useMonitoringLogs(user?.id || '', 5);
   const { data: jobs, isLoading: jobsLoading } = useJobs(user?.id || '');
   const scanJobs = useScanJobs();
 
@@ -160,55 +159,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Scans</h2>
-        </div>
-        <div className="p-6">
-          {!logs || logs.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No recent activity. Click "Scan Jobs Now" to get started!</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {log.scan_type} Scan
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {log.jobs_found} jobs found • {log.jobs_relevant} relevant
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(log.started_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        log.status === 'COMPLETED'
-                          ? 'bg-green-100 text-green-800'
-                          : log.status === 'FAILED'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {log.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Scraped Jobs Table */}
       <div className="bg-white rounded-lg shadow">
