@@ -51,7 +51,7 @@ export default function Settings() {
   const [finnUrls, setFinnUrls] = useState<string[]>([]);
   const [newNavUrl, setNewNavUrl] = useState('');
   const [newFinnUrl, setNewFinnUrl] = useState('');
-  const [isScrap, setIsScraping] = useState(false);
+  const [isScraping, setIsScraping] = useState(false);
   const [scrapeResults, setScrapeResults] = useState<any>(null);
 
   useEffect(() => {
