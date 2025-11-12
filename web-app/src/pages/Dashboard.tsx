@@ -12,6 +12,7 @@ export default function Dashboard() {
   const scanJobs = useScanJobs();
 
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
 
   const handleScanNow = () => {
     if (user) {
@@ -42,8 +43,48 @@ export default function Dashboard() {
       return;
     }
 
-    // TODO: Implement extract details functionality
-    alert(`🔄 Extracting details for ${selectedJobs.length} job(s)...`);
+    setIsExtracting(true);
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Get URLs of selected jobs
+      const selectedJobsData = jobs.filter((j: any) => selectedJobs.includes(j.id));
+      const jobUrls = selectedJobsData.map((j: any) => j.url);
+
+      // Call job-scraper with MODE 2 (jobUrls)
+      const response = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobUrls,
+          userId: user?.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✅ Extracted details for ${data.jobsScraped} job(s)!\n\n` +
+              `Saved: ${data.jobsSaved} new\n` +
+              `Updated: ${data.jobsSkipped} existing`);
+
+        // Refresh jobs list
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Extract error:', error);
+      alert('❌ Error extracting details. Check console for details.');
+    } finally {
+      setIsExtracting(false);
+      setSelectedJobs([]);
+    }
   };
 
   const statCards = [
@@ -181,10 +222,20 @@ export default function Dashboard() {
           {selectedJobs.length > 0 && (
             <button
               onClick={handleExtractDetails}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              disabled={isExtracting}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4" />
-              Extract Details ({selectedJobs.length})
+              {isExtracting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Extracting...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  Extract Details ({selectedJobs.length})
+                </>
+              )}
             </button>
           )}
         </div>
