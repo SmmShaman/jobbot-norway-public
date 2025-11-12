@@ -518,26 +518,22 @@ serve(async (req) => {
       }
     }
 
-    // MODE 2: Scrape specific job URLs
+    // MODE 2: Scrape specific job URLs (EXTRACTION ONLY - no relevance analysis)
     if (jobUrls && Array.isArray(jobUrls)) {
-      console.log('🔍 MODE 2: Scraping specific job URLs with relevance analysis')
+      console.log('🔍 MODE 2: Scraping specific job URLs (extraction only, no AI analysis)')
 
       for (const url of jobUrls) {
         try {
-          // Step 1: Extract job details
+          // Extract job details with AI
           const jobDetails = await extractJobDetails(url)
           results.jobsScraped++
 
-          // Step 2: Analyze relevance to user profile
-          const relevanceAnalysis = await analyzeJobRelevance(supabaseClient, userId, jobDetails)
-
-          // Step 3: Save with relevance data
+          // Save WITHOUT relevance analysis (will be done separately via job-analyzer)
           const saveResult = await saveJobToDatabase(
             supabaseClient,
             userId,
-            jobDetails,
-            relevanceAnalysis.score,
-            relevanceAnalysis.summary
+            jobDetails
+            // No relevance score or summary - user will analyze separately
           )
 
           if (saveResult.created) {
@@ -550,8 +546,8 @@ serve(async (req) => {
             results.jobsSkipped++
           }
 
-          // Rate limiting (2 seconds due to 2 AI calls)
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          // Rate limiting (1 second, only 1 AI call for extraction)
+          await new Promise(resolve => setTimeout(resolve, 1000))
 
         } catch (error) {
           console.error(`❌ Error scraping ${url}:`, error)

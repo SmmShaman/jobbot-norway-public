@@ -12,6 +12,7 @@ export default function Dashboard() {
 
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   const handleScanNow = () => {
@@ -88,6 +89,51 @@ export default function Dashboard() {
       alert('❌ Error extracting details. Check console for details.');
     } finally {
       setIsExtracting(false);
+      setSelectedJobs([]);
+    }
+  };
+
+  const handleAnalyzeRelevance = async () => {
+    if (selectedJobs.length === 0) {
+      alert('⚠️ Please select at least one job to analyze');
+      return;
+    }
+
+    setIsAnalyzing(true);
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/job-analyzer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobIds: selectedJobs,
+          userId: user?.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`✅ Analyzed ${data.jobsAnalyzed} job(s)!\n\n` +
+              `Updated: ${data.jobsUpdated}\n` +
+              `Failed: ${data.jobsFailed}`);
+
+        // Refresh jobs list
+        window.location.reload();
+      } else {
+        alert(`❌ Error: ${data.error}`);
+      }
+    } catch (error: any) {
+      console.error('Analyze error:', error);
+      alert('❌ Error analyzing relevance. Check console for details.');
+    } finally {
+      setIsAnalyzing(false);
       setSelectedJobs([]);
     }
   };
@@ -176,23 +222,42 @@ export default function Dashboard() {
             </p>
           </div>
           {selectedJobs.length > 0 && (
-            <button
-              onClick={handleExtractDetails}
-              disabled={isExtracting}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isExtracting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Extracting...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Extract Details ({selectedJobs.length})
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExtractDetails}
+                disabled={isExtracting || isAnalyzing}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isExtracting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Extracting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Extract Details ({selectedJobs.length})
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleAnalyzeRelevance}
+                disabled={isAnalyzing || isExtracting}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Analyze Relevance ({selectedJobs.length})
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
 
