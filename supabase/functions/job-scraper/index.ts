@@ -9,7 +9,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { parseHTML } from 'https://esm.sh/linkedom@0.16.8'
+import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,7 +47,7 @@ async function extractJobUrlsFromSearchPage(searchUrl: string): Promise<string[]
   }
 
   const html = await response.text()
-  const { document } = parseHTML(html)
+  const document = new DOMParser().parseFromString(html, 'text/html')
 
   // FINN.no job listing selectors
   const jobLinks: string[] = []
@@ -102,7 +102,7 @@ async function extractJobDetails(jobUrl: string): Promise<JobListing> {
   }
 
   const html = await response.text()
-  const { document } = parseHTML(html)
+  const document = new DOMParser().parseFromString(html, 'text/html')
 
   // Extract job details
   const title = document.querySelector('h1, .job-title, [class*="title"]')?.textContent?.trim() || 'Unknown Title'
