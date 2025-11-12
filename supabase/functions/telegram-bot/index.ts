@@ -595,6 +595,18 @@ serve(async (req) => {
         })
       }
 
+      // IMPORTANT: Ignore bot's own result messages (they contain finn.no in text)
+      if (text.includes('Аналіз завершено') ||
+          text.includes('Результати релевантності') ||
+          text.includes('Проаналізовано:') ||
+          text.includes('Деталі витягнуто')) {
+        console.log('Ignoring bot result message')
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+
       // Check conversation state
       const { data: conversation } = await supabase
         .from('telegram_conversations')
@@ -640,6 +652,10 @@ serve(async (req) => {
           `Або просто відправ посилання на FINN.no!\n\n` +
           `📊 Dashboard: https://jobbot-norway.netlify.app`
         )
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
 
       if (text === '/help') {
@@ -659,6 +675,10 @@ serve(async (req) => {
           `/start - Початок роботи\n` +
           `/report - Денний звіт`
         )
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
 
       if (text.startsWith('/scan')) {
@@ -758,7 +778,20 @@ serve(async (req) => {
       if (text === '/report') {
         // TODO: Generate and send daily report
         await sendTelegramMessage(chatId, '📊 Генерую звіт... Зачекайте.')
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
+
+      // If no command matched, send help message
+      await sendTelegramMessage(
+        chatId,
+        `🤔 Не розумію команду. Спробуй:\n\n` +
+        `• Відправити посилання на FINN.no\n` +
+        `• /scan - запустити сканування\n` +
+        `• /help - отримати допомогу`
+      )
     }
 
     return new Response(JSON.stringify({ ok: true }), {
