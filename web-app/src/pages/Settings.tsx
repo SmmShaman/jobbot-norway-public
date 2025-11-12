@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile, useAnalyzeResumes, useSavedProfiles, useSaveProfile, useSetActiveProfile, useDeleteProfile } from '@/hooks/useSettings';
-import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles, Archive, Star } from 'lucide-react';
+import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles, Archive, Star, Play, Loader2 } from 'lucide-react';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -51,6 +51,8 @@ export default function Settings() {
   const [finnUrls, setFinnUrls] = useState<string[]>([]);
   const [newNavUrl, setNewNavUrl] = useState('');
   const [newFinnUrl, setNewFinnUrl] = useState('');
+  const [isScrap, setIsScraping] = useState(false);
+  const [scrapeResults, setScrapeResults] = useState<any>(null);
 
   useEffect(() => {
     if (settings) {
@@ -146,6 +148,64 @@ export default function Settings() {
       alert('❌ Error updating URLs');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleScrapeJobs = async () => {
+    if (!user || finnUrls.length === 0) {
+      alert('⚠️ Please add at least one FINN.no search URL first');
+      return;
+    }
+
+    setIsScraping(true);
+    setScrapeResults(null);
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Scrape all FINN URLs
+      const results = [];
+      for (const searchUrl of finnUrls) {
+        const response = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            searchUrl,
+            userId: user.id,
+          }),
+        });
+
+        const data = await response.json();
+        results.push(data);
+      }
+
+      // Aggregate results
+      const totalScraped = results.reduce((sum, r) => sum + (r.jobsScraped || 0), 0);
+      const totalSaved = results.reduce((sum, r) => sum + (r.jobsSaved || 0), 0);
+      const totalSkipped = results.reduce((sum, r) => sum + (r.jobsSkipped || 0), 0);
+
+      setScrapeResults({
+        success: true,
+        totalScraped,
+        totalSaved,
+        totalSkipped,
+        results,
+      });
+
+      alert(`✅ Scraping complete!\n\nFound: ${totalScraped} jobs\nSaved: ${totalSaved} new\nSkipped: ${totalSkipped} duplicates`);
+    } catch (error: any) {
+      console.error('Scrape error:', error);
+      alert('❌ Error scraping jobs. Check console for details.');
+      setScrapeResults({
+        success: false,
+        error: error.message,
+      });
+    } finally {
+      setIsScraping(false);
     }
   };
 
@@ -1078,6 +1138,54 @@ This profile will be used for automated job applications in Norway, so ensure:
                 ))}
               </div>
             </div>
+
+            {/* Scrape Jobs Button */}
+            {finnUrls.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="font-medium text-blue-900">Manual Job Scraping</h3>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Scrape jobs from {finnUrls.length} FINN.no URL{finnUrls.length > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleScrapeJobs}
+                    disabled={isScraping}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isScraping ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Scraping...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4" />
+                        Scrape Jobs Now
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {scrapeResults && (
+                  <div className={`mt-3 p-3 rounded ${scrapeResults.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                    {scrapeResults.success ? (
+                      <div className="text-sm text-green-800">
+                        <div className="font-medium mb-1">✅ Scraping Complete!</div>
+                        <div>📊 Found: <strong>{scrapeResults.totalScraped}</strong> jobs</div>
+                        <div>💾 Saved: <strong>{scrapeResults.totalSaved}</strong> new</div>
+                        <div>⏭️ Skipped: <strong>{scrapeResults.totalSkipped}</strong> duplicates</div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-red-800">
+                        ❌ Error: {scrapeResults.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={handleSaveSearchUrls}
