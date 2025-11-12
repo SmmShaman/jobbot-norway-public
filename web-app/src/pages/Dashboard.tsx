@@ -230,10 +230,13 @@ export default function Dashboard() {
                     Location
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                    Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Discovered
+                    Deadline
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -284,6 +287,33 @@ export default function Dashboard() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{job.location || '-'}</div>
                       </td>
+                      <td className="px-6 py-4">
+                        <div className="text-xs text-gray-700">
+                          {job.contact_person && (
+                            <div className="mb-1">{job.contact_person}</div>
+                          )}
+                          {job.contact_email && (
+                            <div className="mb-1">
+                              <a href={`mailto:${job.contact_email}`} className="text-primary-600 hover:underline">
+                                {job.contact_email}
+                              </a>
+                            </div>
+                          )}
+                          {job.contact_phone && (
+                            <div>
+                              <a href={`tel:${job.contact_phone}`} className="text-primary-600 hover:underline">
+                                {job.contact_phone}
+                              </a>
+                            </div>
+                          )}
+                          {!job.contact_person && !job.contact_email && !job.contact_phone && '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {job.deadline ? new Date(job.deadline).toLocaleDateString('no-NO') : '-'}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
@@ -292,9 +322,6 @@ export default function Dashboard() {
                         }`}>
                           {job.status}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(job.discovered_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <a
@@ -309,76 +336,32 @@ export default function Dashboard() {
                     </tr>
                     {expandedJobId === job.id && (
                       <tr key={`${job.id}-details`} className="bg-gray-50">
-                        <td colSpan={8} className="px-6 py-4">
+                        <td colSpan={10} className="px-6 py-4">
                           <div className="space-y-4">
                             {/* Description */}
                             {job.description && (
                               <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
-                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.description}</p>
-                              </div>
-                            )}
-
-                            {/* Contact Information */}
-                            {(job.contact_person || job.contact_email || job.contact_phone) && (
-                              <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Contact Information</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
-                                  {job.contact_person && (
-                                    <div>
-                                      <span className="font-medium">Person:</span> {job.contact_person}
-                                    </div>
-                                  )}
-                                  {job.contact_email && (
-                                    <div>
-                                      <span className="font-medium">Email:</span>{' '}
-                                      <a href={`mailto:${job.contact_email}`} className="text-primary-600 hover:underline">
-                                        {job.contact_email}
-                                      </a>
-                                    </div>
-                                  )}
-                                  {job.contact_phone && (
-                                    <div>
-                                      <span className="font-medium">Phone:</span>{' '}
-                                      <a href={`tel:${job.contact_phone}`} className="text-primary-600 hover:underline">
-                                        {job.contact_phone}
-                                      </a>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Deadline */}
-                            {job.deadline && (
-                              <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Application Deadline</h4>
-                                <p className="text-sm text-gray-700">{job.deadline}</p>
-                              </div>
-                            )}
-
-                            {/* AI Recommendation */}
-                            {job.ai_recommendation && (
-                              <div>
-                                <h4 className="text-sm font-semibold text-gray-900 mb-2">AI Recommendation</h4>
-                                <p className="text-sm text-gray-700">{job.ai_recommendation}</p>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Job Description</h4>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-96 overflow-y-auto">{job.description}</p>
                               </div>
                             )}
 
                             {/* Metadata */}
-                            <div className="flex items-center gap-6 text-xs text-gray-500 pt-2 border-t border-gray-200">
-                              <div>
-                                <span className="font-medium">Source:</span> {job.source}
-                              </div>
-                              <div>
-                                <span className="font-medium">Scraped:</span> {new Date(job.scraped_at || job.discovered_at).toLocaleString()}
-                              </div>
-                              {job.relevance_score && (
+                            {(job.source || job.scraped_at || job.discovered_at || job.relevance_score) && (
+                              <div className="flex items-center gap-6 text-xs text-gray-500 pt-2 border-t border-gray-200">
                                 <div>
-                                  <span className="font-medium">Relevance:</span> {job.relevance_score}%
+                                  <span className="font-medium">Source:</span> {job.source}
                                 </div>
-                              )}
-                            </div>
+                                <div>
+                                  <span className="font-medium">Scraped:</span> {new Date(job.scraped_at || job.discovered_at).toLocaleString()}
+                                </div>
+                                {job.relevance_score && (
+                                  <div>
+                                    <span className="font-medium">Relevance:</span> {job.relevance_score}%
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>

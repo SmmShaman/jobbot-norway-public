@@ -169,6 +169,25 @@ Return ONLY valid JSON, no additional text.`
       hasContact: !!(extractedData.contact_person || extractedData.contact_email || extractedData.contact_phone)
     })
 
+    // Convert Norwegian date format (DD.MM.YYYY) to ISO (YYYY-MM-DD)
+    let deadlineISO: string | undefined = undefined
+    if (extractedData.deadline) {
+      try {
+        // Try to parse DD.MM.YYYY or YYYY-MM-DD
+        const dateMatch = extractedData.deadline.match(/(\d{2})\.(\d{2})\.(\d{4})/)
+        if (dateMatch) {
+          // DD.MM.YYYY format
+          const [, day, month, year] = dateMatch
+          deadlineISO = `${year}-${month}-${day}`
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(extractedData.deadline)) {
+          // Already ISO format
+          deadlineISO = extractedData.deadline
+        }
+      } catch (e) {
+        console.error('Failed to parse deadline:', extractedData.deadline)
+      }
+    }
+
     const jobListing: JobListing = {
       title: extractedData.title || 'Unknown Title',
       company: extractedData.company || 'Unknown Company',
@@ -179,7 +198,7 @@ Return ONLY valid JSON, no additional text.`
       contact_person: extractedData.contact_person || undefined,
       contact_email: extractedData.contact_email || undefined,
       contact_phone: extractedData.contact_phone || undefined,
-      deadline: extractedData.deadline || undefined,
+      deadline: deadlineISO,
       posted_date: undefined,
     }
 
