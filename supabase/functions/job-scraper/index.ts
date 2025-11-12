@@ -52,11 +52,11 @@ async function extractJobUrlsFromSearchPage(searchUrl: string): Promise<string[]
   // FINN.no job listing selectors
   const jobLinks: string[] = []
 
-  // Try multiple selectors (FINN.no structure may vary)
+  // Try multiple selectors (FINN.no 2025 structure)
   const selectors = [
-    'article.sf-search-ad a[href*="/job/fulltime/ad.html"]',
-    'a[href*="/job/fulltime/ad.html"]',
-    '.ads__unit__link[href*="/job/"]',
+    'a[href*="/job/ad/"]',
+    '[data-testid="search-results"] a[href*="/job/ad/"]',
+    'a[href^="https://www.finn.no/job/ad/"]',
   ]
 
   for (const selector of selectors) {
