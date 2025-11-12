@@ -107,7 +107,36 @@ async function extractJobDetails(jobUrl: string): Promise<JobListing> {
   // Extract job details (FINN.no 2025 structure)
   const title = document.querySelector('h1')?.textContent?.trim() || 'Unknown Title'
 
-  const company = document.querySelector('h2')?.textContent?.trim() || 'Unknown Company'
+  // Extract company from JSON-LD structured data (most reliable)
+  let company = 'Unknown Company'
+  const scriptTags = document.querySelectorAll('script[type="application/ld+json"]')
+  for (const script of Array.from(scriptTags)) {
+    try {
+      const data = JSON.parse(script.textContent || '{}')
+      if (data['@type'] === 'JobPosting' && data.hiringOrganization?.name) {
+        company = data.hiringOrganization.name
+        break
+      }
+    } catch (e) {
+      // Skip invalid JSON
+    }
+  }
+
+  // Fallback: look for strong tag near "Arbeidsgiver" or similar
+  if (company === 'Unknown Company') {
+    const strongTags = document.querySelectorAll('strong')
+    for (const strong of Array.from(strongTags)) {
+      const text = strong.textContent?.trim() || ''
+      // Skip breadcrumbs and navigation
+      if (text.length > 2 && text.length < 100 &&
+          !text.includes('Her er du') &&
+          !text.includes('FINN') &&
+          !text.includes('Jobb')) {
+        company = text
+        break
+      }
+    }
+  }
 
   // Location is in dd elements, look for one with address pattern
   const ddElements = document.querySelectorAll('dd')
