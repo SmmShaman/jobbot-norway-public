@@ -176,6 +176,254 @@ function formatDailyReport(report: any) {
   return text
 }
 
+// Send typing action
+async function sendTypingAction(chatId: string) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendChatAction`
+
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      action: 'typing',
+    }),
+  })
+}
+
+// Edit message text
+async function editMessage(chatId: string, messageId: number, text: string, replyMarkup?: any) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`
+
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    }),
+  })
+}
+
+/**
+ * Full pipeline orchestration: Scan → Extract → Analyze
+ */
+async function runFullPipeline(
+  supabase: any,
+  supabaseUrl: string,
+  supabaseKey: string,
+  userId: string,
+  finnUrl: string,
+  chatId: string
+) {
+  console.log('🚀 Starting full pipeline for URL:', finnUrl)
+
+  // Step 1: Send initial message
+  await sendTypingAction(chatId)
+  const initialMsg = await sendTelegramMessage(
+    chatId,
+    `🔍 <b>Починаю сканування вакансій</b>\n\n` +
+    `📋 Посилання: <code>${finnUrl}</code>\n\n` +
+    `⏳ Шукаю вакансії...`
+  )
+  const statusMessageId = initialMsg.result.message_id
+
+  try {
+    // STEP 1: Scan URLs from search page (MODE 1)
+    await sendTypingAction(chatId)
+    console.log('Step 1: Scanning job URLs...')
+
+    const scanResponse = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        searchUrl: finnUrl,
+        userId: userId,
+      }),
+    })
+
+    const scanData = await scanResponse.json()
+    console.log('Scan result:', scanData)
+
+    if (!scanData.success || !scanData.jobs || scanData.jobs.length === 0) {
+      await editMessage(
+        chatId,
+        statusMessageId,
+        `❌ <b>Помилка сканування</b>\n\n` +
+        `Не вдалося знайти вакансії за посиланням.\n` +
+        `Перевір URL або спробуй пізніше.`
+      )
+      return
+    }
+
+    const jobUrls = scanData.jobs.map((j: any) => j.url)
+    const jobTitles = scanData.jobs.map((j: any, idx: number) =>
+      `${idx + 1}. ${j.title} • ${j.company || 'N/A'} • ${j.location || 'N/A'}`
+    )
+
+    await editMessage(
+      chatId,
+      statusMessageId,
+      `✅ <b>Знайдено ${scanData.jobsScraped} вакансій</b>\n\n` +
+      jobTitles.join('\n') + '\n\n' +
+      `⏳ Витягую деталі вакансій (контакти, опис, дедлайни)...`
+    )
+
+    // STEP 2: Extract details (MODE 2)
+    await sendTypingAction(chatId)
+    console.log('Step 2: Extracting job details...')
+
+    const extractResponse = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jobUrls: jobUrls,
+        userId: userId,
+      }),
+    })
+
+    const extractData = await extractResponse.json()
+    console.log('Extract result:', extractData)
+
+    if (!extractData.success) {
+      await editMessage(
+        chatId,
+        statusMessageId,
+        `⚠️ <b>Помилка витягування даних</b>\n\n` +
+        `Вакансії знайдені, але не вдалося витягнути деталі.\n` +
+        `Спробуй ще раз або перевір Dashboard.`
+      )
+      return
+    }
+
+    await editMessage(
+      chatId,
+      statusMessageId,
+      `✅ <b>Деталі витягнуто</b>\n\n` +
+      `📊 Оброблено: ${extractData.jobsScraped} вакансій\n` +
+      `💾 Збережено: ${extractData.jobsSaved} нових\n` +
+      `🔄 Оновлено: ${extractData.jobsUpdated} існуючих\n\n` +
+      `🤖 Зараз аналізую на релевантність з вашим профілем...`
+    )
+
+    // Get job IDs from database
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id, title, company')
+      .in('url', jobUrls)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (!jobs || jobs.length === 0) {
+      await editMessage(
+        chatId,
+        statusMessageId,
+        `⚠️ <b>Не знайдено вакансій в базі</b>\n\n` +
+        `Дані витягнуті, але щось пішло не так при збереженні.\n` +
+        `Перевір Dashboard: https://jobbot-norway.netlify.app`
+      )
+      return
+    }
+
+    const jobIds = jobs.map((j: any) => j.id)
+
+    // STEP 3: Analyze relevance
+    await sendTypingAction(chatId)
+    console.log('Step 3: Analyzing job relevance...')
+
+    const analyzeResponse = await fetch(`${supabaseUrl}/functions/v1/job-analyzer`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jobIds: jobIds,
+        userId: userId,
+      }),
+    })
+
+    const analyzeData = await analyzeResponse.json()
+    console.log('Analyze result:', analyzeData)
+
+    if (!analyzeData.success) {
+      await editMessage(
+        chatId,
+        statusMessageId,
+        `⚠️ <b>Помилка аналізу</b>\n\n` +
+        `Вакансії збережені, але AI аналіз не вдався.\n` +
+        `Можеш запустити аналіз вручну в Dashboard.`
+      )
+      return
+    }
+
+    // STEP 4: Get analysis results and format message
+    const { data: analyzedJobs } = await supabase
+      .from('jobs')
+      .select('id, title, company, location, relevance_score, ai_recommendation')
+      .in('id', jobIds)
+      .order('relevance_score', { ascending: false })
+
+    let resultsText = `✅ <b>Аналіз завершено!</b>\n\n`
+    resultsText += `📊 Проаналізовано: ${analyzeData.jobsAnalyzed} вакансій\n\n`
+    resultsText += `<b>Результати релевантності профіля до вакансій:</b>\n\n`
+
+    analyzedJobs?.forEach((job: any, idx: number) => {
+      const scoreEmoji = job.relevance_score >= 70 ? '🟢' : job.relevance_score >= 40 ? '🟡' : '🔴'
+      resultsText += `${idx + 1}. <b>${job.title}</b>\n`
+      resultsText += `   🏢 ${job.company} • 📍 ${job.location || 'N/A'}\n`
+      resultsText += `   ${scoreEmoji} <b>Оцінка: ${job.relevance_score}/100</b>\n`
+      if (job.ai_recommendation) {
+        resultsText += `   💬 ${job.ai_recommendation.substring(0, 80)}...\n`
+      }
+      resultsText += `\n`
+    })
+
+    resultsText += `\n🔗 <a href="https://jobbot-norway.netlify.app">Відкрити Dashboard</a>`
+
+    // Create inline buttons for top jobs (score >= 60)
+    const topJobs = analyzedJobs?.filter((j: any) => j.relevance_score >= 60) || []
+    const inlineKeyboard = {
+      inline_keyboard: [
+        ...topJobs.slice(0, 3).map((job: any) => [{
+          text: `📝 ${job.title} (${job.relevance_score}/100)`,
+          callback_data: `apply_${job.id}`,
+        }]),
+        [
+          { text: '📊 Dashboard', url: 'https://jobbot-norway.netlify.app' }
+        ]
+      ]
+    }
+
+    await editMessage(
+      chatId,
+      statusMessageId,
+      resultsText,
+      inlineKeyboard
+    )
+
+    console.log('✅ Pipeline completed successfully')
+
+  } catch (error) {
+    console.error('Pipeline error:', error)
+    await editMessage(
+      chatId,
+      statusMessageId,
+      `❌ <b>Помилка виконання</b>\n\n` +
+      `Щось пішло не так: ${error.message}\n\n` +
+      `Спробуй ще раз або перевір Dashboard.`
+    )
+  }
+}
+
 // Main webhook handler
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -369,8 +617,129 @@ serve(async (req) => {
       if (text === '/start') {
         await sendTelegramMessage(
           chatId,
-          `👋 Вітаю! Я JobBot Norway - ваш AI-асистент для пошуку роботи в Норвегії.\n\nЯ буду надсилати вам релевантні вакансії та допомагати готувати заявки.\n\nДля початку налаштуйте свій профіль в веб-додатку: https://jobbot-norway.netlify.app`
+          `👋 <b>Вітаю в JobBot Norway!</b>\n\n` +
+          `Я допоможу знайти та проаналізувати вакансії з FINN.no\n\n` +
+          `<b>Команди:</b>\n` +
+          `/scan - Запустити повне сканування (всі збережені URLs)\n` +
+          `/scan [URL] - Сканувати конкретний URL\n` +
+          `/help - Допомога\n` +
+          `/report - Денний звіт\n\n` +
+          `Або просто відправ посилання на FINN.no!\n\n` +
+          `📊 Dashboard: https://jobbot-norway.netlify.app`
         )
+      }
+
+      if (text === '/help') {
+        await sendTelegramMessage(
+          chatId,
+          `❓ <b>Допомога</b>\n\n` +
+          `<b>Як використовувати:</b>\n` +
+          `1. Відправ посилання на пошук FINN.no\n` +
+          `2. Бот знайде всі вакансії\n` +
+          `3. Витягне деталі кожної вакансії\n` +
+          `4. Проаналізує релевантність до твого профілю\n\n` +
+          `<b>Приклад посилання:</b>\n` +
+          `<code>https://www.finn.no/job/fulltime/search.html?location=0.20001</code>\n\n` +
+          `<b>Команди:</b>\n` +
+          `/scan - Запустити сканування всіх збережених URLs\n` +
+          `/scan [URL] - Сканувати конкретний URL\n` +
+          `/start - Початок роботи\n` +
+          `/report - Денний звіт`
+        )
+      }
+
+      if (text.startsWith('/scan')) {
+        const parts = text.split(' ')
+
+        // Get user settings for stored URLs
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('finn_search_urls, user_id')
+          .eq('telegram_chat_id', chatId)
+          .single()
+
+        if (!settings) {
+          await sendTelegramMessage(
+            chatId,
+            `⚠️ <b>Акаунт не прив'язано</b>\n\n` +
+            `Спочатку прив'яжи свій Telegram в Dashboard:\n` +
+            `https://jobbot-norway.netlify.app\n\n` +
+            `Settings → Telegram → вкажи Chat ID: <code>${chatId}</code>`
+          )
+          return
+        }
+
+        const userId = settings.user_id
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+        if (parts.length > 1) {
+          // /scan with specific URL
+          const url = parts.slice(1).join(' ').trim()
+          if (!url.includes('finn.no')) {
+            await sendTelegramMessage(
+              chatId,
+              `⚠️ Будь ласка, відправ посилання на FINN.no`
+            )
+          } else {
+            await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, url, chatId)
+          }
+        } else {
+          // /scan all saved URLs
+          const savedUrls = settings.finn_search_urls || []
+
+          if (savedUrls.length === 0) {
+            await sendTelegramMessage(
+              chatId,
+              `⚠️ <b>Немає збережених URLs</b>\n\n` +
+              `Додай FINN.no URLs в Dashboard:\n` +
+              `https://jobbot-norway.netlify.app → Settings → Search URLs\n\n` +
+              `Або відправ URL прямо сюди:`
+            )
+          } else {
+            await sendTelegramMessage(
+              chatId,
+              `🚀 <b>Запускаю сканування ${savedUrls.length} збережених URLs...</b>\n\n` +
+              `Це може зайняти кілька хвилин. Я буду оновлювати тебе на кожному етапі!`
+            )
+
+            // Run pipeline for each URL
+            for (const url of savedUrls) {
+              await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, url, chatId)
+              // Wait between URLs to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 3000))
+            }
+          }
+        }
+        return // Important: prevent further processing
+      }
+
+      // Check if user sent a direct FINN.no URL
+      if (text.includes('finn.no')) {
+        // Get user ID from telegram_chat_id
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('user_id')
+          .eq('telegram_chat_id', chatId)
+          .single()
+
+        if (!settings) {
+          await sendTelegramMessage(
+            chatId,
+            `⚠️ <b>Акаунт не прив'язано</b>\n\n` +
+            `Спочатку прив'яжи свій Telegram в Dashboard:\n` +
+            `https://jobbot-norway.netlify.app\n\n` +
+            `Settings → Telegram → вкажи Chat ID: <code>${chatId}</code>`
+          )
+          return
+        }
+
+        const userId = settings.user_id
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+        await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, text, chatId)
+        return
       }
 
       if (text === '/report') {
