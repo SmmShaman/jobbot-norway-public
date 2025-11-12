@@ -542,7 +542,7 @@ export const db = {
     if (jobsError) throw jobsError;
 
     // Query applications table for counts
-    const { data: applications, error: appsError } = await supabase
+    const { data: applications } = await supabase
       .from('applications')
       .select('id, status')
       .eq('user_id', userId);
