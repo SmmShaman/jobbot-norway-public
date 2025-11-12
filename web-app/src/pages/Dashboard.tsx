@@ -50,7 +50,7 @@ export default function Dashboard() {
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
       // Get URLs of selected jobs
-      const selectedJobsData = jobs.filter((j: any) => selectedJobs.includes(j.id));
+      const selectedJobsData = (jobs || []).filter((j: any) => selectedJobs.includes(j.id));
       const jobUrls = selectedJobsData.map((j: any) => j.url);
 
       // Call job-scraper with MODE 2 (jobUrls)
@@ -258,7 +258,7 @@ export default function Dashboard() {
                   <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={selectedJobs.length === jobs.length}
+                      checked={selectedJobs.length === (jobs?.length || 0)}
                       onChange={handleSelectAll}
                       className="rounded border-gray-300"
                     />
@@ -284,7 +284,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {jobs.map((job: any) => (
+                {(jobs || []).map((job: any) => (
                   <tr key={job.id} className={selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
