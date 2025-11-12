@@ -236,6 +236,12 @@ export default function Dashboard() {
                     Deadline
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Score
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Relevance
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -315,6 +321,27 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
+                        {job.relevance_score !== null && job.relevance_score !== undefined ? (
+                          <div className="flex items-center">
+                            <span className={`text-lg font-bold ${
+                              job.relevance_score >= 70 ? 'text-green-600' :
+                              job.relevance_score >= 40 ? 'text-yellow-600' :
+                              'text-red-600'
+                            }`}>
+                              {job.relevance_score}
+                            </span>
+                            <span className="text-xs text-gray-500 ml-1">/100</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Not analyzed</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-xs text-gray-700 max-w-xs truncate">
+                          {job.ai_recommendation || '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
                           job.status === 'RELEVANT' ? 'bg-green-100 text-green-800' :
@@ -336,7 +363,7 @@ export default function Dashboard() {
                     </tr>
                     {expandedJobId === job.id && (
                       <tr key={`${job.id}-details`} className="bg-gray-50">
-                        <td colSpan={10} className="px-6 py-4">
+                        <td colSpan={12} className="px-6 py-4">
                           <div className="space-y-4">
                             {/* Description */}
                             {job.description && (

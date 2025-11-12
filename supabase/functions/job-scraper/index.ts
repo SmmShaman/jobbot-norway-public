@@ -233,9 +233,140 @@ async function extractJobDetails(jobUrl: string): Promise<JobListing> {
 }
 
 /**
+ * Analyze job relevance to user profile using Azure OpenAI
+ */
+async function analyzeJobRelevance(
+  supabaseClient: any,
+  userId: string,
+  job: JobListing
+): Promise<{ score: number; summary: string }> {
+  console.log('🤖 Analyzing job relevance for:', job.title)
+
+  // Get active user profile
+  const { data: profile, error: profileError } = await supabaseClient
+    .from('saved_profiles')
+    .select('profile_data')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .single()
+
+  if (profileError || !profile) {
+    console.log('⚠️ No active profile found, skipping relevance analysis')
+    return { score: 0, summary: 'No profile available for analysis' }
+  }
+
+  const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')!
+  const azureApiKey = Deno.env.get('AZURE_OPENAI_API_KEY')!
+  const deploymentName = Deno.env.get('AZURE_OPENAI_DEPLOYMENT') || 'gpt-4'
+
+  const systemPrompt = `You are an expert HR analyst specializing in matching candidates to job opportunities.
+Analyze the candidate's profile against the job posting and return a structured JSON assessment.
+
+CRITICAL: Return ONLY valid JSON, no markdown, no explanations outside JSON.`
+
+  const userPrompt = JSON.stringify({
+    task: "Проаналізуй релевантність кандидата до вакансії на основі всього наданого профілю (який може містити кілька резюме, історію досвіду, навички, обов'язки та використані інструменти). Виділи з опису вакансії основні обов'язки та вимоги, співстав їх з усіма знайденими згадками у профілі й поверни результат у структурованому JSON.",
+
+    candidate_profile: {
+      ...profile.profile_data,
+      context_notes: "Профіль зібрано на основі кількох резюме, що відображають досвід кандидата у різні періоди його життя."
+    },
+
+    job: {
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      source: job.source,
+      url: job.url,
+      description: job.description
+    },
+
+    output_schema: {
+      score: "0..100 — загальна оцінка релевантності",
+      relevance_summary: "короткий текстовий висновок (1-2 речення)",
+      duties: ["3-8 коротких дій, які потрібно виконувати на посаді"],
+      requirements: ["5-12 ключових вимог або кваліфікацій"],
+      req_pairs: [
+        {
+          require: "назва вимоги",
+          candidate: "YES | PARTIAL | NO",
+          evidence: "короткий доказ з профілю або відсутність",
+          experience_depth: "0–5 (0 — відсутній досвід, 5 — експертний рівень)",
+          recency: "approx_years_since_last_use або немає"
+        }
+      ],
+      key_points: ["до 5 головних спостережень щодо відповідності"],
+      strengths: ["до 4 сильні сторони кандидата для цієї вакансії"],
+      weaknesses: ["до 4 обмеження або недоліки"],
+      action_required: "1-2 рекомендації кандидату (що підсилити або додати до профілю)"
+    },
+
+    rules: [
+      "Якщо у профілі згадано навіть частковий збіг — позначай candidate=PARTIAL із поясненням.",
+      "Якщо навичка або технологія є еквівалентною або суміжною (напр. React vs Vue, Python vs R) — PARTIAL.",
+      "Якщо профіль містить декілька ролей, враховуй усі, навіть старі досвіди.",
+      "Якщо у вакансії не розділено duties та requirements — розділи логічно за змістом.",
+      "Не роби припущень і не додавай нічого, чого немає у профілі.",
+      "Поверни виключно JSON, без markdown або пояснювального тексту."
+    ]
+  }, null, 2)
+
+  try {
+    const response = await fetch(
+      `${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-08-01-preview`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': azureApiKey,
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 3000,
+          response_format: { type: 'json_object' },
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ Azure OpenAI relevance analysis error:', response.status, errorText)
+      return { score: 0, summary: 'Analysis failed' }
+    }
+
+    const data = await response.json()
+    const analysis = JSON.parse(data.choices[0].message.content)
+
+    console.log('✅ Relevance analysis complete:', {
+      score: analysis.score,
+      summary: analysis.relevance_summary?.substring(0, 50) + '...'
+    })
+
+    return {
+      score: analysis.score || 0,
+      summary: analysis.relevance_summary || 'No summary available'
+    }
+
+  } catch (error) {
+    console.error('❌ Relevance analysis failed:', error)
+    return { score: 0, summary: 'Analysis error' }
+  }
+}
+
+/**
  * Save job to database (insert new or update existing)
  */
-async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobListing) {
+async function saveJobToDatabase(
+  supabaseClient: any,
+  userId: string,
+  job: JobListing,
+  relevanceScore?: number,
+  relevanceSummary?: string
+) {
   console.log('💾 Saving job to database:', job.title)
 
   // Check if job already exists
@@ -250,19 +381,29 @@ async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobLi
     console.log('🔄 Job already exists, updating with new details:', job.url)
 
     // Update existing job with fresh data
+    const updateData: any = {
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      description: job.description,
+      contact_person: job.contact_person,
+      contact_email: job.contact_email,
+      contact_phone: job.contact_phone,
+      deadline: job.deadline,
+      updated_at: new Date().toISOString(),
+    }
+
+    // Add relevance data if provided
+    if (relevanceScore !== undefined) {
+      updateData.relevance_score = relevanceScore
+    }
+    if (relevanceSummary) {
+      updateData.ai_recommendation = relevanceSummary
+    }
+
     const { error: updateError } = await supabaseClient
       .from('jobs')
-      .update({
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        description: job.description,
-        contact_person: job.contact_person,
-        contact_email: job.contact_email,
-        contact_phone: job.contact_phone,
-        deadline: job.deadline,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', existing.id)
 
     if (updateError) {
@@ -275,23 +416,33 @@ async function saveJobToDatabase(supabaseClient: any, userId: string, job: JobLi
   }
 
   // Insert new job
+  const insertData: any = {
+    user_id: userId,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    url: job.url,
+    source: job.source,
+    description: job.description,
+    contact_person: job.contact_person,
+    contact_email: job.contact_email,
+    contact_phone: job.contact_phone,
+    deadline: job.deadline,
+    status: 'NEW',
+    discovered_at: new Date().toISOString(),
+  }
+
+  // Add relevance data if provided
+  if (relevanceScore !== undefined) {
+    insertData.relevance_score = relevanceScore
+  }
+  if (relevanceSummary) {
+    insertData.ai_recommendation = relevanceSummary
+  }
+
   const { data, error } = await supabaseClient
     .from('jobs')
-    .insert({
-      user_id: userId,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      url: job.url,
-      source: job.source,
-      description: job.description,
-      contact_person: job.contact_person,
-      contact_email: job.contact_email,
-      contact_phone: job.contact_phone,
-      deadline: job.deadline,
-      status: 'NEW',
-      discovered_at: new Date().toISOString(),
-    })
+    .insert(insertData)
     .select('id')
     .single()
 
@@ -369,14 +520,25 @@ serve(async (req) => {
 
     // MODE 2: Scrape specific job URLs
     if (jobUrls && Array.isArray(jobUrls)) {
-      console.log('🔍 MODE 2: Scraping specific job URLs')
+      console.log('🔍 MODE 2: Scraping specific job URLs with relevance analysis')
 
       for (const url of jobUrls) {
         try {
+          // Step 1: Extract job details
           const jobDetails = await extractJobDetails(url)
           results.jobsScraped++
 
-          const saveResult = await saveJobToDatabase(supabaseClient, userId, jobDetails)
+          // Step 2: Analyze relevance to user profile
+          const relevanceAnalysis = await analyzeJobRelevance(supabaseClient, userId, jobDetails)
+
+          // Step 3: Save with relevance data
+          const saveResult = await saveJobToDatabase(
+            supabaseClient,
+            userId,
+            jobDetails,
+            relevanceAnalysis.score,
+            relevanceAnalysis.summary
+          )
 
           if (saveResult.created) {
             results.jobsSaved++
@@ -388,8 +550,8 @@ serve(async (req) => {
             results.jobsSkipped++
           }
 
-          // Rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          // Rate limiting (2 seconds due to 2 AI calls)
+          await new Promise(resolve => setTimeout(resolve, 2000))
 
         } catch (error) {
           console.error(`❌ Error scraping ${url}:`, error)
