@@ -382,7 +382,11 @@ async function runFullPipeline(
       resultsText += `   🏢 ${job.company} • 📍 ${job.location || 'N/A'}\n`
       resultsText += `   ${scoreEmoji} <b>Оцінка: ${job.relevance_score}/100</b>\n`
       if (job.ai_recommendation) {
-        resultsText += `   💬 ${job.ai_recommendation.substring(0, 80)}...\n`
+        // Show full recommendation (up to 300 chars for detailed explanation)
+        const recommendation = job.ai_recommendation.length > 300
+          ? job.ai_recommendation.substring(0, 300) + '...'
+          : job.ai_recommendation
+        resultsText += `   💬 ${recommendation}\n`
       }
       resultsText += `\n`
     })
@@ -581,6 +585,15 @@ serve(async (req) => {
       const message = update.message
       const chatId = message.chat.id.toString()
       const text = message.text || ''
+
+      // IMPORTANT: Ignore messages from bots (including this bot!)
+      if (message.from?.is_bot) {
+        console.log('Ignoring message from bot')
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
 
       // Check conversation state
       const { data: conversation } = await supabase
