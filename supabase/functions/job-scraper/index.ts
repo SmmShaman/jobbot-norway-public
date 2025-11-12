@@ -104,34 +104,78 @@ async function extractJobDetails(jobUrl: string): Promise<JobListing> {
   const html = await response.text()
   const document = new DOMParser().parseFromString(html, 'text/html')
 
-  // Extract job details
-  const title = document.querySelector('h1, .job-title, [class*="title"]')?.textContent?.trim() || 'Unknown Title'
+  // Extract job details (FINN.no 2025 structure)
+  const title = document.querySelector('h1')?.textContent?.trim() || 'Unknown Title'
 
-  const company = document.querySelector('.company-name, [class*="company"], [class*="employer"]')?.textContent?.trim() ||
-                  document.querySelector('a[href*="/company/"]')?.textContent?.trim() ||
-                  'Unknown Company'
+  const company = document.querySelector('h2')?.textContent?.trim() || 'Unknown Company'
 
-  const location = document.querySelector('.location, [class*="location"], [class*="address"]')?.textContent?.trim() ||
-                   'Unknown Location'
+  // Location is in dd elements, look for one with address pattern
+  const ddElements = document.querySelectorAll('dd')
+  let location = 'Unknown Location'
+  for (const dd of Array.from(ddElements)) {
+    const text = dd.textContent?.trim() || ''
+    // Look for Norwegian postal codes (4 digits followed by city name)
+    if (/\d{4}\s+[A-ZÆØÅ]/.test(text)) {
+      location = text
+      break
+    }
+  }
 
-  // Extract description
-  const descriptionEl = document.querySelector('.job-description, [class*="description"], article')
-  const description = descriptionEl?.textContent?.trim().substring(0, 5000) || ''
+  // Fallback to any dd that looks like an address
+  if (location === 'Unknown Location') {
+    for (const dd of Array.from(ddElements)) {
+      const text = dd.textContent?.trim() || ''
+      if (text.length > 5 && text.length < 100 && !text.includes('@')) {
+        location = text
+        break
+      }
+    }
+  }
 
-  // Extract contact information
-  const contactPerson = document.querySelector('[class*="contact-person"], [class*="contact-name"]')?.textContent?.trim()
+  // Extract description from li elements
+  const listItems = document.querySelectorAll('li')
+  const descriptionParts: string[] = []
+  for (const li of Array.from(listItems)) {
+    const text = li.textContent?.trim()
+    if (text && text.length > 10 && !text.includes('Frist')) {
+      descriptionParts.push(text)
+    }
+  }
+  const description = descriptionParts.slice(0, 20).join('\n').substring(0, 5000)
 
+  // Extract contact person from dt/dd pairs
+  let contactPerson: string | undefined
+  const dtElements = document.querySelectorAll('dt')
+  for (const dt of Array.from(dtElements)) {
+    if (dt.textContent?.includes('Kontaktperson')) {
+      const dd = dt.nextElementSibling
+      if (dd && dd.tagName === 'DD') {
+        contactPerson = dd.textContent?.trim()
+        break
+      }
+    }
+  }
+
+  // Extract email (look for mailto links or email pattern)
   const contactEmail = document.querySelector('a[href^="mailto:"]')?.getAttribute('href')?.replace('mailto:', '') ||
                        html.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/)?.[1]
 
+  // Extract phone (look for Norwegian phone format)
   const contactPhone = document.querySelector('a[href^="tel:"]')?.textContent?.trim() ||
-                       html.match(/(\+47[\s\d]{8,12}|[\d]{8})/)?.[1]
+                       html.match(/(\+47[\s\d]{8,12})/)?.[1]
 
-  // Extract deadline
-  const deadline = document.querySelector('[class*="deadline"], [class*="apply-by"]')?.textContent?.trim()
+  // Extract deadline (look for "Frist" in li elements)
+  let deadline: string | undefined
+  for (const li of Array.from(listItems)) {
+    const text = li.textContent?.trim() || ''
+    if (text.includes('Frist')) {
+      deadline = text.replace('Frist', '').trim()
+      break
+    }
+  }
 
-  // Extract posted date
-  const postedDate = document.querySelector('[class*="published"], [class*="posted"]')?.textContent?.trim()
+  // Extract posted date (not easily available)
+  const postedDate: string | undefined = undefined
 
   const jobListing: JobListing = {
     title,
