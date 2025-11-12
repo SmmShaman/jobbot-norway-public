@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats } from '@/hooks/useDashboard';
 import { useScanJobs, useJobs } from '@/hooks/useJobs';
-import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download } from 'lucide-react';
+import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Dashboard() {
@@ -12,6 +12,7 @@ export default function Dashboard() {
 
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   const handleScanNow = () => {
     if (user) {
@@ -34,6 +35,10 @@ export default function Dashboard() {
     } else {
       setSelectedJobs(jobs?.map((j: any) => j.id) || []);
     }
+  };
+
+  const toggleExpandJob = (jobId: string) => {
+    setExpandedJobId(expandedJobId === jobId ? null : jobId);
   };
 
   const handleExtractDetails = async () => {
@@ -205,7 +210,7 @@ export default function Dashboard() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left">
+                  <th className="px-6 py-3 text-left w-12">
                     <input
                       type="checkbox"
                       checked={selectedJobs.length === (jobs?.length || 0)}
@@ -213,6 +218,7 @@ export default function Dashboard() {
                       className="rounded border-gray-300"
                     />
                   </th>
+                  <th className="px-6 py-3 text-left w-8"></th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Title
                   </th>
@@ -235,47 +241,148 @@ export default function Dashboard() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {(jobs || []).map((job: any) => (
-                  <tr key={job.id} className={selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedJobs.includes(job.id)}
-                        onChange={() => handleSelectJob(job.id)}
-                        className="rounded border-gray-300"
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{job.title}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{job.company || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{job.location || '-'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
-                        job.status === 'RELEVANT' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(job.discovered_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <a
-                        href={job.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 hover:text-primary-900 inline-flex items-center gap-1"
-                      >
-                        View <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </td>
-                  </tr>
+                  <>
+                    <tr
+                      key={job.id}
+                      className={`${selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'} cursor-pointer`}
+                      onClick={(e) => {
+                        // Don't expand if clicking on checkbox or links
+                        if ((e.target as HTMLElement).closest('input, a')) return;
+                        toggleExpandJob(job.id);
+                      }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedJobs.includes(job.id)}
+                          onChange={() => handleSelectJob(job.id)}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpandJob(job.id);
+                          }}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          {expandedJobId === job.id ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">{job.title}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{job.company || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{job.location || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
+                          job.status === 'RELEVANT' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {job.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(job.discovered_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <a
+                          href={job.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-900 inline-flex items-center gap-1"
+                        >
+                          View <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </td>
+                    </tr>
+                    {expandedJobId === job.id && (
+                      <tr key={`${job.id}-details`} className="bg-gray-50">
+                        <td colSpan={8} className="px-6 py-4">
+                          <div className="space-y-4">
+                            {/* Description */}
+                            {job.description && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Description</h4>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.description}</p>
+                              </div>
+                            )}
+
+                            {/* Contact Information */}
+                            {(job.contact_person || job.contact_email || job.contact_phone) && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Contact Information</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                                  {job.contact_person && (
+                                    <div>
+                                      <span className="font-medium">Person:</span> {job.contact_person}
+                                    </div>
+                                  )}
+                                  {job.contact_email && (
+                                    <div>
+                                      <span className="font-medium">Email:</span>{' '}
+                                      <a href={`mailto:${job.contact_email}`} className="text-primary-600 hover:underline">
+                                        {job.contact_email}
+                                      </a>
+                                    </div>
+                                  )}
+                                  {job.contact_phone && (
+                                    <div>
+                                      <span className="font-medium">Phone:</span>{' '}
+                                      <a href={`tel:${job.contact_phone}`} className="text-primary-600 hover:underline">
+                                        {job.contact_phone}
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Deadline */}
+                            {job.deadline && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">Application Deadline</h4>
+                                <p className="text-sm text-gray-700">{job.deadline}</p>
+                              </div>
+                            )}
+
+                            {/* AI Recommendation */}
+                            {job.ai_recommendation && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">AI Recommendation</h4>
+                                <p className="text-sm text-gray-700">{job.ai_recommendation}</p>
+                              </div>
+                            )}
+
+                            {/* Metadata */}
+                            <div className="flex items-center gap-6 text-xs text-gray-500 pt-2 border-t border-gray-200">
+                              <div>
+                                <span className="font-medium">Source:</span> {job.source}
+                              </div>
+                              <div>
+                                <span className="font-medium">Scraped:</span> {new Date(job.scraped_at || job.discovered_at).toLocaleString()}
+                              </div>
+                              {job.relevance_score && (
+                                <div>
+                                  <span className="font-medium">Relevance:</span> {job.relevance_score}%
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
