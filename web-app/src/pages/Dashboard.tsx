@@ -1,13 +1,17 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats, useMonitoringLogs } from '@/hooks/useDashboard';
-import { useScanJobs } from '@/hooks/useJobs';
-import { Briefcase, CheckCircle, Clock, FileText, PlayCircle } from 'lucide-react';
+import { useScanJobs, useJobs } from '@/hooks/useJobs';
+import { Briefcase, CheckCircle, Clock, FileText, PlayCircle, ExternalLink, Download } from 'lucide-react';
+import { useState } from 'react';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
   const { data: logs } = useMonitoringLogs(user?.id || '', 5);
+  const { data: jobs, isLoading: jobsLoading } = useJobs(user?.id || '');
   const scanJobs = useScanJobs();
+
+  const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
 
   const handleScanNow = () => {
     if (user) {
@@ -16,6 +20,30 @@ export default function Dashboard() {
         scan_type: 'MANUAL',
       });
     }
+  };
+
+  const handleSelectJob = (jobId: string) => {
+    setSelectedJobs(prev =>
+      prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedJobs.length === jobs?.length) {
+      setSelectedJobs([]);
+    } else {
+      setSelectedJobs(jobs?.map((j: any) => j.id) || []);
+    }
+  };
+
+  const handleExtractDetails = async () => {
+    if (selectedJobs.length === 0) {
+      alert('⚠️ Please select at least one job');
+      return;
+    }
+
+    // TODO: Implement extract details functionality
+    alert(`🔄 Extracting details for ${selectedJobs.length} job(s)...`);
   };
 
   const statCards = [
@@ -137,6 +165,119 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Scraped Jobs Table */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Scraped Jobs</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {jobs?.length || 0} jobs found • {selectedJobs.length} selected
+            </p>
+          </div>
+          {selectedJobs.length > 0 && (
+            <button
+              onClick={handleExtractDetails}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              <Download className="w-4 h-4" />
+              Extract Details ({selectedJobs.length})
+            </button>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          {jobsLoading ? (
+            <div className="p-8 text-center text-gray-500">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <p className="mt-2">Loading jobs...</p>
+            </div>
+          ) : !jobs || jobs.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <Briefcase className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No jobs found yet. Add FINN.no URLs in Settings and click "Scrape Jobs Now"</p>
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedJobs.length === jobs.length}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300"
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Company
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Discovered
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {jobs.map((job: any) => (
+                  <tr key={job.id} className={selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedJobs.includes(job.id)}
+                        onChange={() => handleSelectJob(job.id)}
+                        className="rounded border-gray-300"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{job.title}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{job.company || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{job.location || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
+                        job.status === 'RELEVANT' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(job.discovered_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <a
+                        href={job.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:text-primary-900 inline-flex items-center gap-1"
+                      >
+                        View <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
