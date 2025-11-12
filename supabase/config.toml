@@ -43,3 +43,6 @@ verify_jwt = false
 
 [functions.job-scraper]
 verify_jwt = false
+
+[functions.job-analyzer]
+verify_jwt = false
