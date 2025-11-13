@@ -1,0 +1,22 @@
+name: Scheduled Job Scanner
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Scheduled Scanner Function
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            https://ptrmidlhfdbybxmyovtm.supabase.co/functions/v1/scheduled-scanner
+
+      - name: Log completion
+        run: echo "Scheduled scan completed at $(date)"
