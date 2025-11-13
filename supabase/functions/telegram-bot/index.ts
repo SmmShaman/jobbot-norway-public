@@ -285,7 +285,7 @@ async function editMessage(chatId: string, messageId: number, text: string, repl
 }
 
 /**
- * Full pipeline orchestration: Scan → Extract → Analyze
+ * Full pipeline orchestration: Scan → Extract → Analyze (with progressive updates)
  */
 async function runFullPipeline(
   supabase: any,
@@ -297,21 +297,17 @@ async function runFullPipeline(
 ) {
   console.log('🚀 Starting full pipeline for URL:', finnUrl)
 
-  // Step 1: Send initial message
-  await sendTypingAction(chatId)
-  const initialMsg = await sendTelegramMessage(
-    chatId,
-    `🔍 <b>Починаю сканування вакансій</b>\n\n` +
-    `📋 Посилання: <code>${finnUrl}</code>\n\n` +
-    `⏳ Шукаю вакансії...`
-  )
-  const statusMessageId = initialMsg.result.message_id
-
   try {
-    // STEP 1: Scan URLs from search page (MODE 1)
+    // STEP 1: Scan URLs from search page
     await sendTypingAction(chatId)
-    console.log('Step 1: Scanning job URLs...')
+    await sendTelegramMessage(
+      chatId,
+      `🔍 <b>Починаю сканування вакансій</b>\n\n` +
+      `📋 Посилання: <code>${finnUrl}</code>\n\n` +
+      `⏳ Шукаю вакансії...`
+    )
 
+    console.log('Step 1: Scanning job URLs...')
     const scanResponse = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
       method: 'POST',
       headers: {
@@ -328,9 +324,8 @@ async function runFullPipeline(
     console.log('Scan result:', scanData)
 
     if (!scanData.success || !scanData.jobs || scanData.jobs.length === 0) {
-      await editMessage(
+      await sendTelegramMessage(
         chatId,
-        statusMessageId,
         `❌ <b>Помилка сканування</b>\n\n` +
         `Не вдалося знайти вакансії за посиланням.\n` +
         `Перевір URL або спробуй пізніше.`
@@ -343,18 +338,20 @@ async function runFullPipeline(
       `${idx + 1}. ${j.title} • ${j.company || 'N/A'} • ${j.location || 'N/A'}`
     )
 
-    await editMessage(
+    await sendTelegramMessage(
       chatId,
-      statusMessageId,
       `✅ <b>Знайдено ${scanData.jobsScraped} вакансій</b>\n\n` +
-      jobTitles.join('\n') + '\n\n' +
+      jobTitles.join('\n')
+    )
+
+    // STEP 2: Extract details
+    await sendTypingAction(chatId)
+    await sendTelegramMessage(
+      chatId,
       `⏳ Витягую деталі вакансій (контакти, опис, дедлайни)...`
     )
 
-    // STEP 2: Extract details (MODE 2)
-    await sendTypingAction(chatId)
     console.log('Step 2: Extracting job details...')
-
     const extractResponse = await fetch(`${supabaseUrl}/functions/v1/job-scraper`, {
       method: 'POST',
       headers: {
@@ -371,9 +368,8 @@ async function runFullPipeline(
     console.log('Extract result:', extractData)
 
     if (!extractData.success) {
-      await editMessage(
+      await sendTelegramMessage(
         chatId,
-        statusMessageId,
         `⚠️ <b>Помилка витягування даних</b>\n\n` +
         `Вакансії знайдені, але не вдалося витягнути деталі.\n` +
         `Спробуй ще раз або перевір Dashboard.`
@@ -381,28 +377,25 @@ async function runFullPipeline(
       return
     }
 
-    await editMessage(
+    await sendTelegramMessage(
       chatId,
-      statusMessageId,
       `✅ <b>Деталі витягнуто</b>\n\n` +
       `📊 Оброблено: ${extractData.jobsScraped} вакансій\n` +
       `💾 Збережено: ${extractData.jobsSaved} нових\n` +
-      `🔄 Оновлено: ${extractData.jobsUpdated} існуючих\n\n` +
-      `🤖 Зараз аналізую на релевантність з вашим профілем...`
+      `🔄 Оновлено: ${extractData.jobsUpdated} існуючих`
     )
 
     // Get job IDs from database
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id, title, company')
+      .select('id, title, company, location, url, description')
       .in('url', jobUrls)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
     if (!jobs || jobs.length === 0) {
-      await editMessage(
+      await sendTelegramMessage(
         chatId,
-        statusMessageId,
         `⚠️ <b>Не знайдено вакансій в базі</b>\n\n` +
         `Дані витягнуті, але щось пішло не так при збереженні.\n` +
         `Перевір Dashboard: https://jobbot-norway.netlify.app`
@@ -410,91 +403,95 @@ async function runFullPipeline(
       return
     }
 
-    const jobIds = jobs.map((j: any) => j.id)
-
-    // STEP 3: Analyze relevance
-    await sendTypingAction(chatId)
-    console.log('Step 3: Analyzing job relevance...')
-
-    const analyzeResponse = await fetch(`${supabaseUrl}/functions/v1/job-analyzer`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        jobIds: jobIds,
-        userId: userId,
-      }),
-    })
-
-    const analyzeData = await analyzeResponse.json()
-    console.log('Analyze result:', analyzeData)
-
-    if (!analyzeData.success) {
-      await editMessage(
-        chatId,
-        statusMessageId,
-        `⚠️ <b>Помилка аналізу</b>\n\n` +
-        `Вакансії збережені, але AI аналіз не вдався.\n` +
-        `Можеш запустити аналіз вручну в Dashboard.`
-      )
-      return
-    }
-
-    // STEP 4: Get analysis results and format message
-    const { data: analyzedJobs } = await supabase
-      .from('jobs')
-      .select('id, title, company, location, relevance_score, ai_recommendation')
-      .in('id', jobIds)
-      .order('relevance_score', { ascending: false })
-
-    let resultsText = `✅ <b>Аналіз завершено!</b>\n\n`
-    resultsText += `📊 Проаналізовано: ${analyzeData.jobsAnalyzed} вакансій\n\n`
-    resultsText += `<b>Результати релевантності профіля до вакансій:</b>\n\n`
-
-    analyzedJobs?.forEach((job: any, idx: number) => {
-      const scoreEmoji = job.relevance_score >= 70 ? '🟢' : job.relevance_score >= 40 ? '🟡' : '🔴'
-      resultsText += `${idx + 1}. <b>${job.title}</b>\n`
-      resultsText += `   🏢 ${job.company} • 📍 ${job.location || 'N/A'}\n`
-      resultsText += `   ${scoreEmoji} <b>Оцінка: ${job.relevance_score}/100</b>\n`
-      if (job.ai_recommendation) {
-        // Show FULL recommendation without truncation
-        resultsText += `   💬 ${job.ai_recommendation}\n`
-      }
-      resultsText += `\n`
-    })
-
-    resultsText += `\n🔗 <a href="https://jobbot-norway.netlify.app">Відкрити Dashboard</a>`
-
-    // Create inline buttons for top jobs (score >= 60)
-    const topJobs = analyzedJobs?.filter((j: any) => j.relevance_score >= 60) || []
-    const inlineKeyboard = {
-      inline_keyboard: [
-        ...topJobs.slice(0, 3).map((job: any) => [{
-          text: `📝 ${job.title} (${job.relevance_score}/100)`,
-          callback_data: `apply_${job.id}`,
-        }]),
-        [
-          { text: '📊 Dashboard', url: 'https://jobbot-norway.netlify.app' }
-        ]
-      ]
-    }
-
-    await editMessage(
+    // STEP 3: Analyze jobs ONE BY ONE and send progressive updates
+    await sendTelegramMessage(
       chatId,
-      statusMessageId,
-      resultsText,
-      inlineKeyboard
+      `🤖 <b>Починаю аналіз релевантності</b>\n\n` +
+      `📋 Буду аналізувати ${jobs.length} вакансій по черзі...`
+    )
+
+    console.log(`Step 3: Analyzing ${jobs.length} jobs progressively...`)
+
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i]
+      await sendTypingAction(chatId)
+
+      console.log(`Analyzing job ${i + 1}/${jobs.length}: ${job.title}`)
+
+      // Analyze single job
+      const analyzeResponse = await fetch(`${supabaseUrl}/functions/v1/job-analyzer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobIds: [job.id], // Analyze ONE job at a time
+          userId: userId,
+        }),
+      })
+
+      const analyzeData = await analyzeResponse.json()
+
+      if (!analyzeData.success) {
+        await sendTelegramMessage(
+          chatId,
+          `⚠️ Помилка аналізу вакансії "${job.title}"`
+        )
+        continue
+      }
+
+      // Get updated job data with analysis
+      const { data: analyzedJob } = await supabase
+        .from('jobs')
+        .select('id, title, company, location, url, relevance_score, ai_recommendation')
+        .eq('id', job.id)
+        .single()
+
+      if (!analyzedJob) continue
+
+      // Format job message with analysis results
+      const scoreEmoji = analyzedJob.relevance_score >= 70 ? '🟢' :
+                        analyzedJob.relevance_score >= 40 ? '🟡' : '🔴'
+
+      let jobText = `${scoreEmoji} <b>${analyzedJob.title}</b>\n\n`
+      jobText += `🏢 <b>Компанія:</b> ${analyzedJob.company}\n`
+      jobText += `📍 <b>Локація:</b> ${analyzedJob.location || 'Не вказано'}\n`
+      jobText += `📊 <b>Релевантність:</b> ${analyzedJob.relevance_score}/100\n\n`
+
+      if (analyzedJob.ai_recommendation) {
+        jobText += `💬 <b>AI висновок:</b>\n${analyzedJob.ai_recommendation}\n\n`
+      }
+
+      jobText += `🔗 <a href="${analyzedJob.url}">Посилання на вакансію</a>`
+
+      // Send job with "Write Application" button
+      const keyboard = {
+        inline_keyboard: [[
+          { text: '✍️ Писати заявку/søknad', callback_data: `write_app_${analyzedJob.id}` }
+        ]]
+      }
+
+      await sendTelegramMessage(chatId, jobText, keyboard)
+
+      // Small delay to avoid flooding
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+
+    // Summary message
+    await sendTelegramMessage(
+      chatId,
+      `✅ <b>Аналіз завершено!</b>\n\n` +
+      `📊 Проаналізовано: ${jobs.length} вакансій\n\n` +
+      `🔗 <a href="https://jobbot-norway.netlify.app">Відкрити Dashboard</a>`
     )
 
     console.log('✅ Pipeline completed successfully')
 
   } catch (error) {
     console.error('Pipeline error:', error)
-    await editMessage(
+    await sendTelegramMessage(
       chatId,
-      statusMessageId,
       `❌ <b>Помилка виконання</b>\n\n` +
       `Щось пішло не так: ${error.message}\n\n` +
       `Спробуй ще раз або перевір Dashboard.`
@@ -570,39 +567,206 @@ serve(async (req) => {
       await answerCallbackQuery(callbackQuery.id)
 
       // Parse callback data
-      const [action, id] = data.split('_')
+      const [action, ...rest] = data.split('_')
 
       switch (action) {
+        case 'write': {
+          // User clicked "Write Application" button
+          const [subaction, jobId] = rest // write_app_jobId => ['app', 'jobId']
+
+          if (subaction === 'app') {
+            await sendTypingAction(chatId)
+            await sendTelegramMessage(chatId, '✍️ <b>Генерую заявку...</b>\n\nОчікуй, це може зайняти до 30 секунд.')
+
+            try {
+              // Get job details
+              const { data: job } = await supabase
+                .from('jobs')
+                .select('*')
+                .eq('id', jobId)
+                .single()
+
+              if (!job) {
+                await sendTelegramMessage(chatId, '❌ Вакансію не знайдено')
+                break
+              }
+
+              // Get user resume/profile
+              const { data: userSettings } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('telegram_chat_id', chatId)
+                .single()
+
+              if (!userSettings) {
+                await sendTelegramMessage(chatId, '❌ Користувача не знайдено. Прив\'яжи Telegram в Dashboard.')
+                break
+              }
+
+              // Get user resume
+              const { data: resume } = await supabase
+                .from('resumes')
+                .select('*')
+                .eq('user_id', userSettings.user_id)
+                .eq('is_primary', true)
+                .single()
+
+              // Generate application using Azure OpenAI
+              const applicationPrompt = userSettings.application_prompt || `
+Ти - експерт з написання мотиваційних листів для вакансій в Норвегії.
+
+ВАКАНСІЯ:
+Назва: ${job.title}
+Компанія: ${job.company}
+Опис: ${job.description}
+Вимоги: ${job.requirements || 'Не вказано'}
+
+КАНДИДАТ:
+${resume?.content || 'Резюме не завантажено'}
+
+ЗАВДАННЯ:
+Напиши професійний søknad (мотиваційний лист) норвезькою мовою для цієї вакансії.
+
+ВИМОГИ:
+- Офіційний, але дружній тон
+- Підкреслити релевантний досвід
+- Показати мотивацію
+- Норвезька мова (Bokmål)
+- Довжина: 150-250 слів
+
+ФОРМАТ ВІДПОВІДІ (JSON):
+{
+  "soknad_no": "текст søknad норвезькою",
+  "translation_uk": "переклад українською"
+}
+              `
+
+              const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')
+              const azureKey = Deno.env.get('AZURE_OPENAI_KEY')
+
+              const aiResponse = await fetch(`${azureEndpoint}/openai/deployments/gpt-4/chat/completions?api-version=2024-08-01-preview`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'api-key': azureKey || '',
+                },
+                body: JSON.stringify({
+                  messages: [
+                    { role: 'system', content: 'You are a professional application letter writer for Norwegian job market.' },
+                    { role: 'user', content: applicationPrompt }
+                  ],
+                  temperature: 0.7,
+                  max_tokens: 1500,
+                  response_format: { type: 'json_object' }
+                })
+              })
+
+              const aiData = await aiResponse.json()
+              const applicationText = aiData.choices[0].message.content
+              const parsedApp = JSON.parse(applicationText)
+
+              // Save application to database
+              const { data: savedApp, error: saveError } = await supabase
+                .from('applications')
+                .insert({
+                  job_id: jobId,
+                  user_id: userSettings.user_id,
+                  cover_letter_no: parsedApp.soknad_no,
+                  cover_letter_uk: parsedApp.translation_uk,
+                  status: 'draft',
+                  created_at: new Date().toISOString()
+                })
+                .select()
+                .single()
+
+              if (saveError || !savedApp) {
+                await sendTelegramMessage(chatId, `❌ Помилка збереження: ${saveError?.message}`)
+                break
+              }
+
+              // Send application preview
+              let previewText = `✅ <b>Заявка готова!</b>\n\n`
+              previewText += `📋 <b>Вакансія:</b> ${job.title}\n`
+              previewText += `🏢 <b>Компанія:</b> ${job.company}\n\n`
+              previewText += `━━━━━━━━━━━━━━━━━━\n`
+              previewText += `🇳�u200c🇴 <b>Søknad (Norsk):</b>\n\n`
+              previewText += `${parsedApp.soknad_no}\n\n`
+              previewText += `━━━━━━━━━━━━━━━━━━\n`
+              previewText += `🇺🇦 <b>Переклад (Українська):</b>\n\n`
+              previewText += `${parsedApp.translation_uk}`
+
+              const keyboard = {
+                inline_keyboard: [
+                  [
+                    { text: '✅ Підтвердити', callback_data: `approve_app_${savedApp.id}` },
+                    { text: '❌ Відхилити', callback_data: `reject_app_${savedApp.id}` }
+                  ],
+                  [
+                    { text: '✏️ Редагувати', callback_data: `edit_app_${savedApp.id}` }
+                  ]
+                ]
+              }
+
+              await sendTelegramMessage(chatId, previewText, keyboard)
+
+            } catch (error) {
+              console.error('Application generation error:', error)
+              await sendTelegramMessage(chatId, `❌ <b>Помилка генерації заявки</b>\n\n${error.message}`)
+            }
+          }
+          break
+        }
+
         case 'apply': {
-          // User wants to apply to job
+          // Legacy handler - can be removed or redirected
           const jobId = id
-
-          // TODO: Trigger application generation via Edge Function
-          // Call: /functions/v1/generate-application
-
           await sendTelegramMessage(chatId, '⏳ Генерую заявку... Зачекайте, будь ласка.')
-
-          // The generate-application function will send the preview when ready
           break
         }
 
         case 'approve': {
           // User approves application
-          const applicationId = id
+          const [subaction, applicationId] = rest // approve_app_appId => ['app', 'appId']
 
-          // TODO: Submit application
-          // Call: /functions/v1/submit-application
+          if (subaction === 'app') {
+            // Update application status to approved
+            const { error } = await supabase
+              .from('applications')
+              .update({ status: 'approved', approved_at: new Date().toISOString() })
+              .eq('id', applicationId)
 
-          await sendTelegramMessage(chatId, '✅ Відправляю заявку... Зачекайте.')
+            if (error) {
+              await sendTelegramMessage(chatId, `❌ Помилка: ${error.message}`)
+              break
+            }
+
+            await sendTelegramMessage(
+              chatId,
+              `✅ <b>Заявку затверджено!</b>\n\n` +
+              `Тепер її можна використати для подання на вакансію.\n\n` +
+              `🔗 <a href="https://jobbot-norway.netlify.app">Відкрити Dashboard</a> для відправки`
+            )
+          }
           break
         }
 
         case 'reject': {
-          // User rejects application - show feedback options
-          const applicationId = id
+          // User rejects application
+          const [subaction, applicationId] = rest // reject_app_appId => ['app', 'appId']
 
-          const feedback = formatFeedbackOptions(applicationId)
-          await sendTelegramMessage(chatId, feedback.text, feedback.reply_markup)
+          if (subaction === 'app') {
+            // Update application status to rejected
+            await supabase
+              .from('applications')
+              .update({ status: 'rejected' })
+              .eq('id', applicationId)
+
+            await sendTelegramMessage(
+              chatId,
+              `❌ <b>Заявку відхилено</b>\n\n` +
+              `Ти можеш створити нову заявку, натиснувши кнопку "Писати заявку" під вакансією.`
+            )
+          }
           break
         }
 
@@ -648,30 +812,42 @@ serve(async (req) => {
 
         case 'edit': {
           // Open manual editor
-          const [subaction, applicationId] = data.split('_').slice(1)
+          const [subaction, applicationId] = rest // edit_app_appId => ['app', 'appId']
 
-          if (subaction === 'manual') {
-            // Send current Ukrainian version for editing
-            const { data: version } = await supabase
-              .from('application_versions')
-              .select('cover_letter_uk')
-              .eq('application_id', applicationId)
-              .eq('is_current', true)
+          if (subaction === 'app') {
+            // Get current application
+            const { data: app } = await supabase
+              .from('applications')
+              .select('*')
+              .eq('id', applicationId)
               .single()
+
+            if (!app) {
+              await sendTelegramMessage(chatId, '❌ Заявку не знайдено')
+              break
+            }
 
             await sendTelegramMessage(
               chatId,
-              `✏️ <b>Редагування заявки</b>\n\nПоточна версія (українською):\n\n${version?.cover_letter_uk}\n\n<i>Надішліть виправлену версію повідомленням:</i>`
+              `✏️ <b>Редагування заявки</b>\n\n` +
+              `<b>Поточна версія (норвезькою):</b>\n\n${app.cover_letter_no}\n\n` +
+              `━━━━━━━━━━━━━━━━━━\n\n` +
+              `<b>Переклад (українською):</b>\n\n${app.cover_letter_uk}\n\n` +
+              `━━━━━━━━━━━━━━━━━━\n\n` +
+              `<i>Надішли відредагований текст заявки <b>норвезькою</b> наступним повідомленням:</i>`
             )
 
-            // Update state to WAITING_EDIT
+            // Update conversation state to WAITING_EDIT
             await supabase
               .from('telegram_conversations')
               .upsert({
                 chat_id: chatId,
                 telegram_user_id: callbackQuery.from.id.toString(),
                 state: 'WAITING_EDIT',
-                current_application_id: applicationId
+                current_application_id: applicationId,
+                updated_at: new Date().toISOString()
+              }, {
+                onConflict: 'chat_id'
               })
           }
           break
@@ -764,15 +940,97 @@ serve(async (req) => {
       }
 
       if (conversation?.state === 'WAITING_EDIT') {
-        // User sent edited version
-        // TODO: Send to LLM for grammar correction and translation
+        // User sent edited version (in Norwegian)
+        const editedText = text
+        const applicationId = conversation.current_application_id
+
+        await sendTypingAction(chatId)
         await sendTelegramMessage(chatId, '✅ Обробляю вашу версію...')
+
+        try {
+          // Translate edited Norwegian text to Ukrainian using AI
+          const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')
+          const azureKey = Deno.env.get('AZURE_OPENAI_KEY')
+
+          const translationResponse = await fetch(`${azureEndpoint}/openai/deployments/gpt-4/chat/completions?api-version=2024-08-01-preview`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'api-key': azureKey || '',
+            },
+            body: JSON.stringify({
+              messages: [
+                { role: 'system', content: 'You are a professional translator. Translate Norwegian text to Ukrainian.' },
+                { role: 'user', content: `Translate this Norwegian job application letter to Ukrainian:\n\n${editedText}` }
+              ],
+              temperature: 0.3,
+              max_tokens: 1000
+            })
+          })
+
+          const translationData = await translationResponse.json()
+          const ukrainianTranslation = translationData.choices[0].message.content
+
+          // Update application with edited version
+          const { error } = await supabase
+            .from('applications')
+            .update({
+              cover_letter_no: editedText,
+              cover_letter_uk: ukrainianTranslation,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', applicationId)
+
+          if (error) {
+            await sendTelegramMessage(chatId, `❌ Помилка збереження: ${error.message}`)
+          } else {
+            // Get job info
+            const { data: app } = await supabase
+              .from('applications')
+              .select('*, jobs(title, company)')
+              .eq('id', applicationId)
+              .single()
+
+            // Send updated application preview
+            let previewText = `✅ <b>Заявка оновлена!</b>\n\n`
+            previewText += `📋 <b>Вакансія:</b> ${app.jobs.title}\n`
+            previewText += `🏢 <b>Компанія:</b> ${app.jobs.company}\n\n`
+            previewText += `━━━━━━━━━━━━━━━━━━\n`
+            previewText += `🇳🇴 <b>Søknad (Norsk):</b>\n\n`
+            previewText += `${editedText}\n\n`
+            previewText += `━━━━━━━━━━━━━━━━━━\n`
+            previewText += `🇺🇦 <b>Переклад (Українська):</b>\n\n`
+            previewText += `${ukrainianTranslation}`
+
+            const keyboard = {
+              inline_keyboard: [
+                [
+                  { text: '✅ Підтвердити', callback_data: `approve_app_${applicationId}` },
+                  { text: '❌ Відхилити', callback_data: `reject_app_${applicationId}` }
+                ],
+                [
+                  { text: '✏️ Редагувати ще раз', callback_data: `edit_app_${applicationId}` }
+                ]
+              ]
+            }
+
+            await sendTelegramMessage(chatId, previewText, keyboard)
+          }
+        } catch (error) {
+          console.error('Edit processing error:', error)
+          await sendTelegramMessage(chatId, `❌ Помилка обробки: ${error.message}`)
+        }
 
         // Reset state
         await supabase
           .from('telegram_conversations')
-          .update({ state: 'IDLE' })
+          .update({ state: 'IDLE', current_application_id: null })
           .eq('chat_id', chatId)
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
 
       // Handle commands
