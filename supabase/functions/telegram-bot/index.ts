@@ -13,10 +13,46 @@ const corsHeaders = {
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 
+// Global variables for loop prevention and rate limiting
+const botMessageIds = new Set<string>()
+const userCooldowns = new Map<string, number>()
+
 interface TelegramUpdate {
   update_id: number
   message?: any
+  edited_message?: any
+  channel_post?: any
+  edited_channel_post?: any
   callback_query?: any
+}
+
+/**
+ * Validate FINN.no URL to prevent false positives
+ * Only accept direct job search/ad URLs
+ */
+function isValidFinnUrl(text: string): boolean {
+  const trimmed = text.trim()
+  // Match only real FINN.no job search and ad URLs
+  const searchPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/search\.html/i
+  const adPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/ad\.html/i
+
+  return searchPattern.test(trimmed) || adPattern.test(trimmed)
+}
+
+/**
+ * Check cooldown to prevent spam (10 seconds between requests)
+ */
+function checkCooldown(chatId: string): boolean {
+  const lastRequest = userCooldowns.get(chatId)
+  const now = Date.now()
+
+  // 10 seconds cooldown
+  if (lastRequest && (now - lastRequest) < 10000) {
+    return false
+  }
+
+  userCooldowns.set(chatId, now)
+  return true
 }
 
 // Send message via Telegram API
@@ -34,7 +70,14 @@ async function sendTelegramMessage(chatId: string, text: string, replyMarkup?: a
     }),
   })
 
-  return response.json()
+  const result = await response.json()
+
+  // Store message_id to prevent processing bot's own messages
+  if (result.ok && result.result?.message_id) {
+    botMessageIds.add(`${chatId}_${result.result.message_id}`)
+  }
+
+  return result
 }
 
 // Answer callback query (acknowledge button press)
@@ -194,7 +237,7 @@ async function sendTypingAction(chatId: string) {
 async function editMessage(chatId: string, messageId: number, text: string, replyMarkup?: any) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`
 
-  await fetch(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -205,6 +248,15 @@ async function editMessage(chatId: string, messageId: number, text: string, repl
       reply_markup: replyMarkup,
     }),
   })
+
+  const result = await response.json()
+
+  // Store edited message_id as well
+  if (result.ok && messageId) {
+    botMessageIds.add(`${chatId}_${messageId}`)
+  }
+
+  return result
 }
 
 /**
@@ -439,6 +491,41 @@ serve(async (req) => {
 
     const update: TelegramUpdate = await req.json()
 
+    // 1. CRITICAL: Ignore edited messages and channel posts to prevent loops
+    if (update.edited_message || update.channel_post || update.edited_channel_post) {
+      console.log('Ignoring edited_message/channel_post')
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // 2. CRITICAL: Deduplicate updates by update_id
+    const updateId = update.update_id
+    const { data: processed } = await supabase
+      .from('processed_updates')
+      .select('update_id')
+      .eq('update_id', updateId)
+      .maybeSingle()
+
+    if (processed) {
+      console.log('Update already processed:', updateId)
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // Store update_id to prevent reprocessing
+    await supabase
+      .from('processed_updates')
+      .insert({
+        update_id: updateId,
+        processed_at: new Date().toISOString()
+      })
+      .select()
+      .maybeSingle()
+
     // Handle callback query (button press)
     if (update.callback_query) {
       const callbackQuery = update.callback_query
@@ -581,9 +668,10 @@ serve(async (req) => {
     if (update.message) {
       const message = update.message
       const chatId = message.chat.id.toString()
+      const messageId = message.message_id
       const text = message.text || ''
 
-      // IMPORTANT: Ignore messages from bots (including this bot!)
+      // 3. CRITICAL: Ignore messages from bots
       if (message.from?.is_bot) {
         console.log('Ignoring message from bot')
         return new Response(JSON.stringify({ ok: true }), {
@@ -592,13 +680,27 @@ serve(async (req) => {
         })
       }
 
-      // IMPORTANT: Ignore bot's own result messages (they contain finn.no in text)
+      // 4. CRITICAL: Ignore bot's own messages by message_id
+      if (botMessageIds.has(`${chatId}_${messageId}`)) {
+        console.log('Ignoring bot own message (message_id tracked)')
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      }
+
+      // 5. BACKUP: Ignore bot's result messages by content (in case message_id tracking fails)
       if (text.includes('Аналіз завершено') ||
           text.includes('Результати релевантності') ||
           text.includes('Проаналізовано:') ||
           text.includes('Деталі витягнуто') ||
           text.includes('Оцінка:') ||
           text.includes('Відкрити Dashboard') ||
+          text.includes('Починаю сканування') ||
+          text.includes('Шукаю вакансії') ||
+          text.includes('Помилка сканування') ||
+          text.includes('Помилка витягування') ||
+          text.includes('Помилка аналізу') ||
           text.includes('🟢') || text.includes('🟡') || text.includes('🔴')) {
         console.log('Ignoring bot result message (contains result indicators)')
         return new Response(JSON.stringify({ ok: true }), {
@@ -709,14 +811,40 @@ serve(async (req) => {
         if (parts.length > 1) {
           // /scan with specific URL
           const url = parts.slice(1).join(' ').trim()
-          if (!url.includes('finn.no')) {
+
+          // Validate URL strictly
+          if (!isValidFinnUrl(url)) {
             await sendTelegramMessage(
               chatId,
-              `⚠️ Будь ласка, відправ посилання на FINN.no`
+              `⚠️ Невірне посилання!\n\n` +
+              `Підтримуються тільки посилання FINN.no:\n` +
+              `• <code>https://finn.no/job/fulltime/search.html?...</code>\n` +
+              `• <code>https://finn.no/job/parttime/search.html?...</code>\n` +
+              `• <code>https://finn.no/job/management/search.html?...</code>`
             )
-          } else {
-            await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, url, chatId)
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            })
           }
+
+          // Check cooldown
+          if (!checkCooldown(chatId)) {
+            await sendTelegramMessage(
+              chatId,
+              `⏳ Зачекай 10 секунд перед наступним запитом`
+            )
+            return new Response(JSON.stringify({ ok: true }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            })
+          }
+
+          await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, url, chatId)
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          })
         } else {
           // /scan all saved URLs
           const savedUrls = settings.finn_search_urls || []
@@ -747,8 +875,20 @@ serve(async (req) => {
         return // Important: prevent further processing
       }
 
-      // Check if user sent a direct FINN.no URL
-      if (text.includes('finn.no')) {
+      // 6. CRITICAL: Check if user sent a direct FINN.no URL (strict validation)
+      if (isValidFinnUrl(text)) {
+        // Check cooldown first
+        if (!checkCooldown(chatId)) {
+          await sendTelegramMessage(
+            chatId,
+            `⏳ Зачекай 10 секунд перед наступним запитом`
+          )
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          })
+        }
+
         // Get user ID from telegram_chat_id
         const { data: settings } = await supabase
           .from('user_settings')
@@ -764,7 +904,10 @@ serve(async (req) => {
             `https://jobbot-norway.netlify.app\n\n` +
             `Settings → Telegram → вкажи Chat ID: <code>${chatId}</code>`
           )
-          return
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          })
         }
 
         const userId = settings.user_id
@@ -772,7 +915,10 @@ serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
         await runFullPipeline(supabase, supabaseUrl, supabaseKey, userId, text, chatId)
-        return
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
 
       if (text === '/report') {
