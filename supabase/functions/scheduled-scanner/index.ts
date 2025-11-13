@@ -23,6 +23,7 @@ interface UserSchedule {
 
 /**
  * Check if current time matches cron expression
+ * Now with 5-minute tolerance window to handle pg_cron's 5-minute intervals
  */
 function matchesCron(cronExpr: string, timezone: string): boolean {
   const now = new Date()
@@ -30,7 +31,10 @@ function matchesCron(cronExpr: string, timezone: string): boolean {
   // Simple cron matching for common patterns
   // Format: minute hour day month dayOfWeek
   const parts = cronExpr.split(' ')
-  if (parts.length !== 5) return false
+  if (parts.length !== 5) {
+    console.log(`Invalid cron expression: ${cronExpr}`)
+    return false
+  }
 
   const [minute, hour, , , dayOfWeek] = parts
 
@@ -38,14 +42,26 @@ function matchesCron(cronExpr: string, timezone: string): boolean {
   const currentHour = now.getHours()
   const currentDay = now.getDay() // 0=Sunday, 1=Monday, etc.
 
-  // Check minute
-  if (minute !== '*' && parseInt(minute) !== currentMinute) {
-    return false
-  }
+  console.log(`Checking cron: ${cronExpr} vs current time: ${currentHour}:${currentMinute}, day: ${currentDay}`)
 
-  // Check hour
+  // Check hour first
   if (hour !== '*' && !hour.includes(',') && !hour.includes('/')) {
     if (parseInt(hour) !== currentHour) {
+      console.log(`Hour mismatch: expected ${hour}, got ${currentHour}`)
+      return false
+    }
+  }
+
+  // Check minute with 5-minute tolerance window
+  // If cron says "0" (0 minutes), match if current minute is 0-4
+  // If cron says "30", match if current minute is 30-34
+  if (minute !== '*') {
+    const targetMinute = parseInt(minute)
+    const minuteDiff = Math.abs(currentMinute - targetMinute)
+
+    // Allow 5-minute window (since pg_cron runs every 5 minutes)
+    if (minuteDiff > 4 && minuteDiff < 56) { // 56 to handle wrap-around (e.g., 59 vs 0)
+      console.log(`Minute mismatch: expected ${minute}, got ${currentMinute}, diff: ${minuteDiff}`)
       return false
     }
   }
@@ -54,10 +70,12 @@ function matchesCron(cronExpr: string, timezone: string): boolean {
   if (dayOfWeek !== '*') {
     const allowedDays = dayOfWeek.split(',').map(d => parseInt(d))
     if (!allowedDays.includes(currentDay)) {
+      console.log(`Day mismatch: expected ${dayOfWeek}, got ${currentDay}`)
       return false
     }
   }
 
+  console.log(`✅ Cron matches!`)
   return true
 }
 
@@ -264,11 +282,17 @@ serve(async (req) => {
 
     console.log(`👥 Found ${users.length} users with enabled schedules`)
 
+    // Log all users and their schedules for debugging
+    users.forEach((user: any) => {
+      console.log(`User: ${user.user_id}, Cron: ${user.scan_schedule_cron}, TZ: ${user.scan_schedule_timezone}, Telegram: ${user.telegram_chat_id}`)
+    })
+
     // Check which users should be scanned now based on their cron schedule
     const results = []
     let totalScanned = 0
 
     for (const user of users) {
+      console.log(`\n🔍 Checking user ${user.user_id}...`)
       const shouldScan = matchesCron(user.scan_schedule_cron, user.scan_schedule_timezone)
 
       if (shouldScan) {
