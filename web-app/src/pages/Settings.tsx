@@ -375,7 +375,11 @@ export default function Settings() {
     try {
       await updateSettings.mutateAsync({
         userId: user.id,
-        updates: scheduleSettings,
+        updates: {
+          scan_schedule_enabled: scheduleSettings.scan_schedule_enabled,
+          scan_schedule_cron: scheduleSettings.scan_schedule_cron,
+          scan_schedule_timezone: scheduleSettings.scan_schedule_timezone,
+        } as any,
       });
       alert('✅ Automation settings saved!');
     } catch (error) {
