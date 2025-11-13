@@ -4,6 +4,37 @@ import { useScanJobs, useJobs } from '@/hooks/useJobs';
 import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
+// Helper function to determine job status based on data
+function getJobStatus(job: any): { label: string; color: string } {
+  // Check if in NAV report (complete)
+  if (job.nav_report_id || job.in_nav_report) {
+    return { label: 'Complete', color: 'bg-purple-100 text-purple-800' };
+  }
+
+  // Check if application sent
+  if (job.application_sent_at || (job.application_status === 'submitted')) {
+    return { label: 'Sended', color: 'bg-blue-100 text-blue-800' };
+  }
+
+  // Check if søknad written
+  if (job.has_application || job.cover_letter_id) {
+    return { label: 'Søknad', color: 'bg-teal-100 text-teal-800' };
+  }
+
+  // Check if analyzed
+  if (job.relevance_score !== null && job.relevance_score !== undefined && job.ai_recommendation) {
+    return { label: 'Analyzed', color: 'bg-green-100 text-green-800' };
+  }
+
+  // Check if full details extracted
+  if (job.description && job.company && job.location) {
+    return { label: 'Full', color: 'bg-yellow-100 text-yellow-800' };
+  }
+
+  // New job (only URL, no details yet)
+  return { label: 'New', color: 'bg-gray-100 text-gray-800' };
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
@@ -402,18 +433,23 @@ export default function Dashboard() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-xs text-gray-700 max-w-xs truncate">
-                          {job.ai_recommendation || '-'}
+                        <div className="text-xs text-gray-700 max-w-xs">
+                          {job.ai_recommendation ? (
+                            <div className="line-clamp-2" title={job.ai_recommendation}>
+                              {job.ai_recommendation}
+                            </div>
+                          ) : '-'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
-                          job.status === 'RELEVANT' ? 'bg-green-100 text-green-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {job.status}
-                        </span>
+                        {(() => {
+                          const status = getJobStatus(job);
+                          return (
+                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${status.color}`}>
+                              {status.label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <a
@@ -430,6 +466,16 @@ export default function Dashboard() {
                       <tr key={`${job.id}-details`} className="bg-gray-50">
                         <td colSpan={12} className="px-6 py-4">
                           <div className="space-y-4">
+                            {/* AI Recommendation - Full Text */}
+                            {job.ai_recommendation && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-2">🤖 AI Relevance Analysis</h4>
+                                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{job.ai_recommendation}</p>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Description */}
                             {job.description && (
                               <div>

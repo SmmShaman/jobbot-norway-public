@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserProfile, useUpdateProfile, useUserSettings, useUpdateSettings, useUploadResume, useAIParsedProfile, useAnalyzeResumes, useSavedProfiles, useSaveProfile, useSetActiveProfile, useDeleteProfile } from '@/hooks/useSettings';
-import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles, Archive, Star, Play, Loader2 } from 'lucide-react';
+import { User, Settings as SettingsIcon, Globe, Zap, MessageSquare, Upload, Save, Trash2, CheckCircle2, FileText, Eye, Sparkles, Archive, Star, Play, Loader2, Clock } from 'lucide-react';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -103,6 +103,23 @@ export default function Settings() {
       setAiPromptSettings({
         custom_system_prompt: settings.custom_system_prompt || '',
         custom_user_prompt: settings.custom_user_prompt || '',
+      });
+    }
+  }, [settings]);
+
+  // Scheduled scanning settings state
+  const [scheduleSettings, setScheduleSettings] = useState({
+    scan_schedule_enabled: false,
+    scan_schedule_cron: '0 9 * * *', // Default: Every day at 9 AM
+    scan_schedule_timezone: 'Europe/Oslo',
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setScheduleSettings({
+        scan_schedule_enabled: settings.scan_schedule_enabled || false,
+        scan_schedule_cron: settings.scan_schedule_cron || '0 9 * * *',
+        scan_schedule_timezone: settings.scan_schedule_timezone || 'Europe/Oslo',
       });
     }
   }, [settings]);
@@ -352,11 +369,28 @@ export default function Settings() {
     }
   };
 
+  const handleSaveScheduleSettings = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    try {
+      await updateSettings.mutateAsync({
+        userId: user.id,
+        updates: scheduleSettings,
+      });
+      alert('✅ Automation settings saved!');
+    } catch (error) {
+      alert('❌ Error saving automation settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'resume', label: 'Resume', icon: Upload },
     { id: 'search', label: 'Search URLs', icon: Globe },
     { id: 'application', label: 'Application', icon: Zap },
+    { id: 'automation', label: 'Automation', icon: Clock },
     { id: 'nav', label: 'NAV Login', icon: SettingsIcon },
     { id: 'telegram', label: 'Telegram', icon: MessageSquare },
   ];
@@ -1323,6 +1357,123 @@ This profile will be used for automated job applications in Norway, so ensure:
             >
               <Save className="w-4 h-4" />
               {isSaving ? 'Saving...' : 'Save Credentials'}
+            </button>
+          </div>
+        )}
+
+        {/* Automation Tab */}
+        {activeTab === 'automation' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Scheduled Scanning</h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Automate job scanning by setting up a schedule. The system will automatically check for new jobs at specified times.
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2 text-sm text-blue-800">
+                  <p className="font-medium">How it works:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Enable automatic scanning below</li>
+                    <li>Choose your preferred schedule (daily, twice daily, or custom)</li>
+                    <li>System will scrape jobs, extract details, and analyze relevance automatically</li>
+                    <li>Receive Telegram notifications for relevant jobs (if Telegram is enabled)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Enable/Disable Toggle */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <label htmlFor="schedule-enabled" className="text-sm font-medium text-gray-900">
+                  Enable Scheduled Scanning
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically scan for jobs based on your schedule
+                </p>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="schedule-enabled"
+                  checked={scheduleSettings.scan_schedule_enabled}
+                  onChange={(e) => setScheduleSettings({ ...scheduleSettings, scan_schedule_enabled: e.target.checked })}
+                  className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            {/* Schedule Settings */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Scan Schedule
+                </label>
+                <select
+                  value={scheduleSettings.scan_schedule_cron}
+                  onChange={(e) => setScheduleSettings({ ...scheduleSettings, scan_schedule_cron: e.target.value })}
+                  disabled={!scheduleSettings.scan_schedule_enabled}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="0 9 * * *">Every day at 9:00 AM</option>
+                  <option value="0 9,18 * * *">Twice daily (9:00 AM & 6:00 PM)</option>
+                  <option value="0 */6 * * *">Every 6 hours</option>
+                  <option value="0 */4 * * *">Every 4 hours</option>
+                  <option value="0 9 * * 1">Every Monday at 9:00 AM</option>
+                  <option value="0 9 * * 1,3,5">Monday, Wednesday, Friday at 9:00 AM</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choose how often to scan for new jobs
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Timezone
+                </label>
+                <select
+                  value={scheduleSettings.scan_schedule_timezone}
+                  onChange={(e) => setScheduleSettings({ ...scheduleSettings, scan_schedule_timezone: e.target.value })}
+                  disabled={!scheduleSettings.scan_schedule_enabled}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="Europe/Oslo">Europe/Oslo (Norway)</option>
+                  <option value="Europe/Kiev">Europe/Kiev (Ukraine)</option>
+                  <option value="Europe/London">Europe/London (UK)</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Current Schedule Info */}
+            {scheduleSettings.scan_schedule_enabled && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-green-800">
+                  <span className="font-medium">✓ Active:</span> Next scan will run according to your schedule ({scheduleSettings.scan_schedule_cron}) in {scheduleSettings.scan_schedule_timezone} timezone.
+                </p>
+              </div>
+            )}
+
+            {/* Warning if disabled */}
+            {!scheduleSettings.scan_schedule_enabled && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  <span className="font-medium">⚠ Disabled:</span> Automatic scanning is currently off. Enable it above to start scheduled scans.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={handleSaveScheduleSettings}
+              disabled={isSaving}
+              className="flex items-center gap-2 bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : 'Save Automation Settings'}
             </button>
           </div>
         )}

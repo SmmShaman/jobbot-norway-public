@@ -552,7 +552,8 @@ export const db = {
 
     // Calculate stats from jobs
     const totalJobs = jobs?.length || 0;
-    const relevantJobs = jobs?.filter(j => j.status === 'RELEVANT' || (j.relevance_score && j.relevance_score >= 70)).length || 0;
+    // Count jobs with relevance score above 50%
+    const relevantJobs = jobs?.filter(j => j.relevance_score && j.relevance_score > 50).length || 0;
 
     return {
       total_jobs: totalJobs,

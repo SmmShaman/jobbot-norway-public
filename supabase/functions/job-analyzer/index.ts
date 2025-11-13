@@ -177,6 +177,7 @@ serve(async (req) => {
       jobsAnalyzed: 0,
       jobsUpdated: 0,
       jobsFailed: 0,
+      jobsSkipped: 0, // Already analyzed jobs
       jobs: [] as any[],
     }
 
@@ -194,6 +195,20 @@ serve(async (req) => {
         if (jobError || !job) {
           console.error(`❌ Job not found: ${jobId}`)
           results.jobsFailed++
+          continue
+        }
+
+        // Skip if already analyzed (has relevance_score and ai_recommendation)
+        if (job.relevance_score !== null && job.relevance_score !== undefined && job.ai_recommendation) {
+          console.log(`⏭️ Job already analyzed (score: ${job.relevance_score}), skipping:`, job.title)
+          results.jobsSkipped++
+          results.jobs.push({
+            id: jobId,
+            title: job.title,
+            score: job.relevance_score,
+            summary: job.ai_recommendation,
+            skipped: true,
+          })
           continue
         }
 
@@ -237,7 +252,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         ...results,
-        message: `Analyzed ${results.jobsAnalyzed} jobs: ${results.jobsUpdated} updated, ${results.jobsFailed} failed`,
+        message: `Analyzed ${results.jobsAnalyzed} jobs: ${results.jobsUpdated} updated, ${results.jobsSkipped} skipped (already analyzed), ${results.jobsFailed} failed`,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
