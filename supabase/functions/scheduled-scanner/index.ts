@@ -22,61 +22,86 @@ interface UserSchedule {
 }
 
 /**
- * Check if current time matches cron expression
- * Now with 5-minute tolerance window to handle pg_cron's 5-minute intervals
+ * Check if current time matches cron expression in user's timezone
  */
 function matchesCron(cronExpr: string, timezone: string): boolean {
   const now = new Date()
 
-  // Simple cron matching for common patterns
+  // Parse cron expression
   // Format: minute hour day month dayOfWeek
   const parts = cronExpr.split(' ')
   if (parts.length !== 5) {
-    console.log(`Invalid cron expression: ${cronExpr}`)
+    console.log(`❌ Invalid cron expression: ${cronExpr}`)
     return false
   }
 
   const [minute, hour, , , dayOfWeek] = parts
 
-  const currentMinute = now.getMinutes()
-  const currentHour = now.getHours()
-  const currentDay = now.getDay() // 0=Sunday, 1=Monday, etc.
+  // ✅ CRITICAL FIX: Convert current time to user's timezone
+  try {
+    // Get current time components in user's timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    })
 
-  console.log(`Checking cron: ${cronExpr} vs current time: ${currentHour}:${currentMinute}, day: ${currentDay}`)
+    const formattedParts = formatter.formatToParts(now)
+    const currentHour = parseInt(formattedParts.find(p => p.type === 'hour')?.value || '0')
+    const currentMinute = parseInt(formattedParts.find(p => p.type === 'minute')?.value || '0')
 
-  // Check hour first
-  if (hour !== '*' && !hour.includes(',') && !hour.includes('/')) {
-    if (parseInt(hour) !== currentHour) {
-      console.log(`Hour mismatch: expected ${hour}, got ${currentHour}`)
-      return false
+    // Get day of week in user's timezone
+    const dayFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+    })
+    const dayName = dayFormatter.format(now)
+    const dayMap: { [key: string]: number } = {
+      'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6
     }
-  }
+    const currentDay = dayMap[dayName]
 
-  // Check minute with 5-minute tolerance window
-  // If cron says "0" (0 minutes), match if current minute is 0-4
-  // If cron says "30", match if current minute is 30-34
-  if (minute !== '*') {
-    const targetMinute = parseInt(minute)
-    const minuteDiff = Math.abs(currentMinute - targetMinute)
+    console.log(`⏰ Checking cron: ${cronExpr}`)
+    console.log(`   Current time in ${timezone}: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}, day: ${dayName}(${currentDay})`)
+    console.log(`   UTC time: ${now.toISOString()}`)
 
-    // Allow 5-minute window (since pg_cron runs every 5 minutes)
-    if (minuteDiff > 4 && minuteDiff < 56) { // 56 to handle wrap-around (e.g., 59 vs 0)
-      console.log(`Minute mismatch: expected ${minute}, got ${currentMinute}, diff: ${minuteDiff}`)
-      return false
+    // Check hour
+    if (hour !== '*' && !hour.includes(',') && !hour.includes('/')) {
+      if (parseInt(hour) !== currentHour) {
+        console.log(`   ❌ Hour mismatch: expected ${hour}, got ${currentHour}`)
+        return false
+      }
     }
-  }
 
-  // Check day of week
-  if (dayOfWeek !== '*') {
-    const allowedDays = dayOfWeek.split(',').map(d => parseInt(d))
-    if (!allowedDays.includes(currentDay)) {
-      console.log(`Day mismatch: expected ${dayOfWeek}, got ${currentDay}`)
-      return false
+    // Check minute with 5-minute tolerance (pg_cron runs every 5 min)
+    if (minute !== '*') {
+      const targetMinute = parseInt(minute)
+      const minuteDiff = Math.abs(currentMinute - targetMinute)
+
+      // Allow 5-minute window to handle pg_cron delays
+      if (minuteDiff > 4 && minuteDiff < 56) {
+        console.log(`   ❌ Minute mismatch: expected ${minute}, got ${currentMinute}, diff: ${minuteDiff}`)
+        return false
+      }
     }
-  }
 
-  console.log(`✅ Cron matches!`)
-  return true
+    // Check day of week
+    if (dayOfWeek !== '*') {
+      const allowedDays = dayOfWeek.split(',').map(d => parseInt(d))
+      if (!allowedDays.includes(currentDay)) {
+        console.log(`   ❌ Day mismatch: expected ${allowedDays.join(',')}, got ${currentDay}`)
+        return false
+      }
+    }
+
+    console.log(`   ✅ Cron matches! Triggering scan...`)
+    return true
+
+  } catch (error) {
+    console.error(`❌ Error checking cron with timezone ${timezone}:`, error)
+    return false
+  }
 }
 
 /**
@@ -202,16 +227,42 @@ async function runScanForUser(
 
       message += `<i>Час сканування: ${new Date().toLocaleString('uk-UA', { timeZone: user.scan_schedule_timezone })}</i>`
 
-      const telegramToken = Deno.env.get('TELEGRAM_BOT_TOKEN')!
-      await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: user.telegram_chat_id,
-          text: message,
-          parse_mode: 'HTML',
-        }),
-      })
+      const telegramToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
+
+      if (!telegramToken) {
+        console.error('❌ TELEGRAM_BOT_TOKEN is not set in environment variables!')
+      } else {
+        try {
+          console.log(`📤 Sending Telegram message to ${user.telegram_chat_id}`)
+          console.log(`   Message length: ${message.length} chars`)
+
+          const telegramResponse = await fetch(
+            `https://api.telegram.org/bot${telegramToken}/sendMessage`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: user.telegram_chat_id,
+                text: message,
+                parse_mode: 'HTML',
+              }),
+            }
+          )
+
+          const telegramResult = await telegramResponse.json()
+
+          if (!telegramResult.ok) {
+            console.error(`❌ Telegram API error:`, telegramResult)
+            console.error(`   Error code: ${telegramResult.error_code}`)
+            console.error(`   Description: ${telegramResult.description}`)
+          } else {
+            console.log(`✅ Telegram notification sent successfully (message_id: ${telegramResult.result?.message_id})`)
+          }
+        } catch (error) {
+          console.error(`❌ Failed to send Telegram notification:`, error)
+          // Don't throw - continue execution
+        }
+      }
     }
 
     // Update last scan time
