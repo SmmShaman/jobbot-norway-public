@@ -114,6 +114,12 @@ export default function Settings() {
     scan_schedule_timezone: 'Europe/Oslo',
   });
 
+  // Custom schedule settings
+  const [scheduleMode, setScheduleMode] = useState<'preset' | 'custom'>('preset');
+  const [customHour, setCustomHour] = useState('9');
+  const [customMinute, setCustomMinute] = useState('0');
+  const [customDays, setCustomDays] = useState<string[]>(['*']); // * = every day
+
   useEffect(() => {
     if (settings) {
       setScheduleSettings({
@@ -123,6 +129,28 @@ export default function Settings() {
       });
     }
   }, [settings]);
+
+  // Parse cron to extract custom values
+  useEffect(() => {
+    const cron = scheduleSettings.scan_schedule_cron;
+    const parts = cron.split(' ');
+    if (parts.length === 5) {
+      const [minute, hour, , , dayOfWeek] = parts;
+      setCustomMinute(minute);
+      setCustomHour(hour);
+      if (dayOfWeek === '*') {
+        setCustomDays(['*']);
+      } else {
+        setCustomDays(dayOfWeek.split(','));
+      }
+    }
+  }, [scheduleSettings.scan_schedule_cron]);
+
+  // Generate cron expression from custom settings
+  const generateCronExpression = (hour: string, minute: string, days: string[]): string => {
+    const dayString = days.includes('*') ? '*' : days.join(',');
+    return `${minute} ${hour} * * ${dayString}`;
+  };
 
   useEffect(() => {
     if (settings) {
@@ -369,18 +397,46 @@ export default function Settings() {
     }
   };
 
+  const handleToggleDay = (day: string) => {
+    if (customDays.includes('*')) {
+      // If "every day" is selected, replace with the clicked day
+      setCustomDays([day]);
+    } else if (customDays.includes(day)) {
+      // Remove day if already selected
+      const newDays = customDays.filter(d => d !== day);
+      // If no days selected, set to every day
+      setCustomDays(newDays.length === 0 ? ['*'] : newDays);
+    } else {
+      // Add day
+      setCustomDays([...customDays, day]);
+    }
+  };
+
   const handleSaveScheduleSettings = async () => {
     if (!user) return;
     setIsSaving(true);
     try {
+      // If custom mode, generate cron from custom settings
+      let cronToSave = scheduleSettings.scan_schedule_cron;
+      if (scheduleMode === 'custom') {
+        cronToSave = generateCronExpression(customHour, customMinute, customDays);
+      }
+
       await updateSettings.mutateAsync({
         userId: user.id,
         updates: {
           scan_schedule_enabled: scheduleSettings.scan_schedule_enabled,
-          scan_schedule_cron: scheduleSettings.scan_schedule_cron,
+          scan_schedule_cron: cronToSave,
           scan_schedule_timezone: scheduleSettings.scan_schedule_timezone,
         } as any,
       });
+
+      // Update local state with saved cron
+      setScheduleSettings({
+        ...scheduleSettings,
+        scan_schedule_cron: cronToSave,
+      });
+
       alert('✅ Automation settings saved!');
     } catch (error) {
       alert('❌ Error saving automation settings');
@@ -1413,27 +1469,153 @@ This profile will be used for automated job applications in Norway, so ensure:
 
             {/* Schedule Settings */}
             <div className="space-y-4">
+              {/* Schedule Mode Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Scan Schedule
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Schedule Type
                 </label>
-                <select
-                  value={scheduleSettings.scan_schedule_cron}
-                  onChange={(e) => setScheduleSettings({ ...scheduleSettings, scan_schedule_cron: e.target.value })}
-                  disabled={!scheduleSettings.scan_schedule_enabled}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
-                >
-                  <option value="0 9 * * *">Every day at 9:00 AM</option>
-                  <option value="0 9,18 * * *">Twice daily (9:00 AM & 6:00 PM)</option>
-                  <option value="0 */6 * * *">Every 6 hours</option>
-                  <option value="0 */4 * * *">Every 4 hours</option>
-                  <option value="0 9 * * 1">Every Monday at 9:00 AM</option>
-                  <option value="0 9 * * 1,3,5">Monday, Wednesday, Friday at 9:00 AM</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Choose how often to scan for new jobs
-                </p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scheduleMode"
+                      checked={scheduleMode === 'preset'}
+                      onChange={() => setScheduleMode('preset')}
+                      disabled={!scheduleSettings.scan_schedule_enabled}
+                      className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500 disabled:opacity-50"
+                    />
+                    <span className="text-sm text-gray-700">Quick presets</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="scheduleMode"
+                      checked={scheduleMode === 'custom'}
+                      onChange={() => setScheduleMode('custom')}
+                      disabled={!scheduleSettings.scan_schedule_enabled}
+                      className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500 disabled:opacity-50"
+                    />
+                    <span className="text-sm text-gray-700">Custom time & days</span>
+                  </label>
+                </div>
               </div>
+
+              {/* Preset Mode */}
+              {scheduleMode === 'preset' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Scan Schedule
+                  </label>
+                  <select
+                    value={scheduleSettings.scan_schedule_cron}
+                    onChange={(e) => setScheduleSettings({ ...scheduleSettings, scan_schedule_cron: e.target.value })}
+                    disabled={!scheduleSettings.scan_schedule_enabled}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="0 9 * * *">Every day at 9:00 AM</option>
+                    <option value="0 9,18 * * *">Twice daily (9:00 AM & 6:00 PM)</option>
+                    <option value="0 */6 * * *">Every 6 hours</option>
+                    <option value="0 */4 * * *">Every 4 hours</option>
+                    <option value="0 9 * * 1">Every Monday at 9:00 AM</option>
+                    <option value="0 9 * * 1,3,5">Monday, Wednesday, Friday at 9:00 AM</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose from common schedules
+                  </p>
+                </div>
+              )}
+
+              {/* Custom Mode */}
+              {scheduleMode === 'custom' && (
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Hour */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Hour (0-23)
+                      </label>
+                      <select
+                        value={customHour}
+                        onChange={(e) => setCustomHour(e.target.value)}
+                        disabled={!scheduleSettings.scan_schedule_enabled}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i.toString()}>
+                            {i.toString().padStart(2, '0')}:00
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Minute */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Minute (0-59)
+                      </label>
+                      <select
+                        value={customMinute}
+                        onChange={(e) => setCustomMinute(e.target.value)}
+                        disabled={!scheduleSettings.scan_schedule_enabled}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        {Array.from({ length: 60 }, (_, i) => (
+                          <option key={i} value={i.toString()}>
+                            :{i.toString().padStart(2, '0')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Days of Week */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Days of Week
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: 'Every Day', value: '*' },
+                        { label: 'Mon', value: '1' },
+                        { label: 'Tue', value: '2' },
+                        { label: 'Wed', value: '3' },
+                        { label: 'Thu', value: '4' },
+                        { label: 'Fri', value: '5' },
+                        { label: 'Sat', value: '6' },
+                        { label: 'Sun', value: '0' },
+                      ].map((day) => {
+                        const isSelected = customDays.includes(day.value);
+                        return (
+                          <button
+                            key={day.value}
+                            type="button"
+                            onClick={() => handleToggleDay(day.value)}
+                            disabled={!scheduleSettings.scan_schedule_enabled}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isSelected
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Select specific days or "Every Day" to run daily
+                    </p>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                    <p className="text-xs text-blue-800">
+                      <span className="font-medium">Preview:</span> Will run at {customHour.padStart(2, '0')}:{customMinute.padStart(2, '0')}
+                      {customDays.includes('*') ? ' every day' : ` on ${customDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseInt(d)] || 'Every Day').join(', ')}`}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
