@@ -53,15 +53,23 @@ interface TelegramUpdate {
 
 /**
  * Validate FINN.no URL to prevent false positives
- * Only accept direct job search/ad URLs
+ * Only accept direct job search/ad URLs (both old and new formats)
  */
 function isValidFinnUrl(text: string): boolean {
   const trimmed = text.trim()
-  // Match only real FINN.no job search and ad URLs
-  const searchPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/search\.html/i
-  const adPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/ad\.html/i
 
-  return searchPattern.test(trimmed) || adPattern.test(trimmed)
+  // Old format: finn.no/job/fulltime/search.html
+  const oldSearchPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/search\.html/i
+  const oldAdPattern = /^https?:\/\/(www\.)?finn\.no\/job\/(fulltime|parttime|management)\/ad\.html/i
+
+  // New format: finn.no/job/search?location=...
+  const newSearchPattern = /^https?:\/\/(www\.)?finn\.no\/job\/search\?/i
+  const newAdPattern = /^https?:\/\/(www\.)?finn\.no\/job\/ad\//i
+
+  return oldSearchPattern.test(trimmed) ||
+         oldAdPattern.test(trimmed) ||
+         newSearchPattern.test(trimmed) ||
+         newAdPattern.test(trimmed)
 }
 
 /**
@@ -1116,7 +1124,8 @@ ${resume?.content || 'Резюме не завантажено'}
           `2. Бот знайде всі вакансії\n` +
           `3. Витягне деталі кожної вакансії\n` +
           `4. Проаналізує релевантність до твого профілю\n\n` +
-          `<b>Приклад посилання:</b>\n` +
+          `<b>Приклади посилань:</b>\n` +
+          `<code>https://www.finn.no/job/search?location=0.20001</code>\n` +
           `<code>https://www.finn.no/job/fulltime/search.html?location=0.20001</code>\n\n` +
           `<b>Команди:</b>\n` +
           `/scan - Запустити сканування всіх збережених URLs\n` +
@@ -1165,6 +1174,7 @@ ${resume?.content || 'Резюме не завантажено'}
               chatId,
               `⚠️ Невірне посилання!\n\n` +
               `Підтримуються тільки посилання FINN.no:\n` +
+              `• <code>https://finn.no/job/search?location=...</code>\n` +
               `• <code>https://finn.no/job/fulltime/search.html?...</code>\n` +
               `• <code>https://finn.no/job/parttime/search.html?...</code>\n` +
               `• <code>https://finn.no/job/management/search.html?...</code>`
