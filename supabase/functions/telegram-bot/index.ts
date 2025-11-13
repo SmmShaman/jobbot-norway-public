@@ -661,7 +661,17 @@ ${resume?.content || 'Резюме не завантажено'}
                 })
               })
 
+              if (!aiResponse.ok) {
+                const errorText = await aiResponse.text()
+                throw new Error(`Azure OpenAI error: ${aiResponse.status} - ${errorText}`)
+              }
+
               const aiData = await aiResponse.json()
+
+              if (!aiData.choices || !aiData.choices[0]?.message?.content) {
+                throw new Error('Invalid AI response format')
+              }
+
               const applicationText = aiData.choices[0].message.content
               const parsedApp = JSON.parse(applicationText)
 
@@ -718,9 +728,12 @@ ${resume?.content || 'Резюме не завантажено'}
         }
 
         case 'apply': {
-          // Legacy handler - can be removed or redirected
-          const jobId = id
-          await sendTelegramMessage(chatId, '⏳ Генерую заявку... Зачекайте, будь ласка.')
+          // Legacy handler - redirect to write_app logic
+          const jobId = rest[0]
+          if (jobId) {
+            await sendTypingAction(chatId)
+            await sendTelegramMessage(chatId, '✍️ <b>Генерую заявку...</b>\n\nОчікуй, це може зайняти до 30 секунд.')
+          }
           break
         }
 
@@ -968,7 +981,17 @@ ${resume?.content || 'Резюме не завантажено'}
             })
           })
 
+          if (!translationResponse.ok) {
+            const errorText = await translationResponse.text()
+            throw new Error(`Translation error: ${translationResponse.status} - ${errorText}`)
+          }
+
           const translationData = await translationResponse.json()
+
+          if (!translationData.choices || !translationData.choices[0]?.message?.content) {
+            throw new Error('Invalid translation response format')
+          }
+
           const ukrainianTranslation = translationData.choices[0].message.content
 
           // Update application with edited version
@@ -984,17 +1007,48 @@ ${resume?.content || 'Резюме не завантажено'}
           if (error) {
             await sendTelegramMessage(chatId, `❌ Помилка збереження: ${error.message}`)
           } else {
-            // Get job info
+            // Get application
             const { data: app } = await supabase
               .from('applications')
-              .select('*, jobs(title, company)')
+              .select('*')
               .eq('id', applicationId)
               .single()
 
+            if (!app) {
+              await sendTelegramMessage(chatId, '❌ Заявку не знайдено')
+              await supabase
+                .from('telegram_conversations')
+                .update({ state: 'IDLE', current_application_id: null })
+                .eq('chat_id', chatId)
+              return new Response(JSON.stringify({ ok: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              })
+            }
+
+            // Get job info separately
+            const { data: job } = await supabase
+              .from('jobs')
+              .select('title, company')
+              .eq('id', app.job_id)
+              .single()
+
+            if (!job) {
+              await sendTelegramMessage(chatId, '❌ Вакансію не знайдено')
+              await supabase
+                .from('telegram_conversations')
+                .update({ state: 'IDLE', current_application_id: null })
+                .eq('chat_id', chatId)
+              return new Response(JSON.stringify({ ok: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+              })
+            }
+
             // Send updated application preview
             let previewText = `✅ <b>Заявка оновлена!</b>\n\n`
-            previewText += `📋 <b>Вакансія:</b> ${app.jobs.title}\n`
-            previewText += `🏢 <b>Компанія:</b> ${app.jobs.company}\n\n`
+            previewText += `📋 <b>Вакансія:</b> ${job.title}\n`
+            previewText += `🏢 <b>Компанія:</b> ${job.company}\n\n`
             previewText += `━━━━━━━━━━━━━━━━━━\n`
             previewText += `🇳🇴 <b>Søknad (Norsk):</b>\n\n`
             previewText += `${editedText}\n\n`
