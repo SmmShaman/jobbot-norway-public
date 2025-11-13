@@ -382,11 +382,8 @@ async function runFullPipeline(
       resultsText += `   🏢 ${job.company} • 📍 ${job.location || 'N/A'}\n`
       resultsText += `   ${scoreEmoji} <b>Оцінка: ${job.relevance_score}/100</b>\n`
       if (job.ai_recommendation) {
-        // Show full recommendation (up to 300 chars for detailed explanation)
-        const recommendation = job.ai_recommendation.length > 300
-          ? job.ai_recommendation.substring(0, 300) + '...'
-          : job.ai_recommendation
-        resultsText += `   💬 ${recommendation}\n`
+        // Show FULL recommendation without truncation
+        resultsText += `   💬 ${job.ai_recommendation}\n`
       }
       resultsText += `\n`
     })
@@ -599,8 +596,11 @@ serve(async (req) => {
       if (text.includes('Аналіз завершено') ||
           text.includes('Результати релевантності') ||
           text.includes('Проаналізовано:') ||
-          text.includes('Деталі витягнуто')) {
-        console.log('Ignoring bot result message')
+          text.includes('Деталі витягнуто') ||
+          text.includes('Оцінка:') ||
+          text.includes('Відкрити Dashboard') ||
+          text.includes('🟢') || text.includes('🟡') || text.includes('🔴')) {
+        console.log('Ignoring bot result message (contains result indicators)')
         return new Response(JSON.stringify({ ok: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
