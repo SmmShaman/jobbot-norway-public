@@ -422,6 +422,12 @@ export default function Settings() {
         cronToSave = generateCronExpression(customHour, customMinute, customDays);
       }
 
+      console.log('Saving schedule settings:', {
+        scan_schedule_enabled: scheduleSettings.scan_schedule_enabled,
+        scan_schedule_cron: cronToSave,
+        scan_schedule_timezone: scheduleSettings.scan_schedule_timezone,
+      });
+
       await updateSettings.mutateAsync({
         userId: user.id,
         updates: {
@@ -438,8 +444,10 @@ export default function Settings() {
       });
 
       alert('✅ Automation settings saved!');
-    } catch (error) {
-      alert('❌ Error saving automation settings');
+    } catch (error: any) {
+      console.error('Error saving automation settings:', error);
+      const errorMessage = error?.message || error?.error?.message || JSON.stringify(error);
+      alert(`❌ Error saving automation settings:\n\n${errorMessage}\n\nPlease check browser console for details.`);
     } finally {
       setIsSaving(false);
     }
