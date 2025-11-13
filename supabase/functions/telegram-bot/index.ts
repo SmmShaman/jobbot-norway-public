@@ -16,6 +16,31 @@ const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 // Global variables for loop prevention and rate limiting
 const botMessageIds = new Set<string>()
 const userCooldowns = new Map<string, number>()
+const MAX_STORED_MESSAGE_IDS = 1000 // Limit to prevent memory leak
+
+/**
+ * Cleanup old data from memory to prevent memory leaks
+ */
+function cleanupOldData() {
+  // Cleanup old message IDs if exceeded limit
+  if (botMessageIds.size > MAX_STORED_MESSAGE_IDS) {
+    const toDelete = botMessageIds.size - MAX_STORED_MESSAGE_IDS
+    const iterator = botMessageIds.values()
+    for (let i = 0; i < toDelete; i++) {
+      const value = iterator.next().value
+      if (value) botMessageIds.delete(value)
+    }
+    console.log(`Cleaned up ${toDelete} old message IDs`)
+  }
+
+  // Cleanup old cooldowns (older than 1 hour)
+  const oneHourAgo = Date.now() - 3600000
+  for (const [chatId, timestamp] of userCooldowns.entries()) {
+    if (timestamp < oneHourAgo) {
+      userCooldowns.delete(chatId)
+    }
+  }
+}
 
 interface TelegramUpdate {
   update_id: number
@@ -477,6 +502,9 @@ async function runFullPipeline(
   }
 }
 
+// Request counter for periodic cleanup
+let requestCount = 0
+
 // Main webhook handler
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -484,6 +512,12 @@ serve(async (req) => {
   }
 
   try {
+    // Periodic cleanup every 100 requests to prevent memory leaks
+    requestCount++
+    if (requestCount % 100 === 0) {
+      cleanupOldData()
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -516,15 +550,16 @@ serve(async (req) => {
       })
     }
 
-    // Store update_id to prevent reprocessing
+    // Store update_id to prevent reprocessing (use upsert to handle race conditions)
     await supabase
       .from('processed_updates')
-      .insert({
+      .upsert({
         update_id: updateId,
         processed_at: new Date().toISOString()
+      }, {
+        onConflict: 'update_id',
+        ignoreDuplicates: true
       })
-      .select()
-      .maybeSingle()
 
     // Handle callback query (button press)
     if (update.callback_query) {
