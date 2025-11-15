@@ -599,7 +599,7 @@ serve(async (req) => {
                 break
               }
 
-              // Get user resume/profile
+              // Get user settings
               const { data: userSettings } = await supabase
                 .from('user_settings')
                 .select('*')
@@ -611,7 +611,17 @@ serve(async (req) => {
                 break
               }
 
-              // Get user resume
+              // Get canonical merged profile (saved_profiles) - use full JSON profile
+              const { data: profileRow } = await supabase
+                .from('saved_profiles')
+                .select('profile_data')
+                .eq('user_id', userSettings.user_id)
+                .eq('is_active', true)
+                .single()
+              
+              const profile = profileRow?.profile_data || null
+              
+              // Backwards-compat: if no saved_profiles, fallback to primary resume
               const { data: resume } = await supabase
                 .from('resumes')
                 .select('*')
@@ -619,9 +629,13 @@ serve(async (req) => {
                 .eq('is_primary', true)
                 .single()
 
-              // Generate application using Azure OpenAI
+              // Build application prompt using the full saved_profiles.profile_data (preferred) or resume content fallback
+              const profileText = profile 
+                ? JSON.stringify(profile, null, 2) 
+                : (resume?.content || 'Резюме не завантажено')
+              
               const applicationPrompt = userSettings.application_prompt || `
-Ти - експерт з написання мотиваційних листів для вакансій в Норвегії.
+Ти — експерт з написання мотиваційних листів для вакансій в Норвегії.
 
 ВАКАНСІЯ:
 Назва: ${job.title}
@@ -629,59 +643,87 @@ serve(async (req) => {
 Опис: ${job.description}
 Вимоги: ${job.requirements || 'Не вказано'}
 
-КАНДИДАТ:
-${resume?.content || 'Резюме не завантажено'}
+КАНДИДАТ (повний профіль, saved_profiles.profile_data):
+${profileText}
 
 ЗАВДАННЯ:
-Напиши професійний søknad (мотиваційний лист) норвезькою мовою для цієї вакансії.
+Напиши професійний, адаптований до вакансії søknad (мотиваційний лист) норвезькою мовою (Bokmål).
 
 ВИМОГИ:
 - Офіційний, але дружній тон
-- Підкреслити релевантний досвід
-- Показати мотивацію
-- Норвезька мова (Bokmål)
+- Підкреслити релевантний досвід і навички (витягнути з профілю)
+- Показати мотивацію та релевантність до специфічних вимог
 - Довжина: 150-250 слів
 
-ФОРМАТ ВІДПОВІДІ (JSON):
+ФОРМАТ ВІДПОВІДІ (STRICT JSON ONLY — НІЯКИХ МАРКДАУН/ТЕКСТОВИХ ПІДСУМКІВ):
 {
   "soknad_no": "текст søknad норвезькою",
   "translation_uk": "переклад українською"
 }
               `
 
-              const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')
-              const azureKey = Deno.env.get('AZURE_OPENAI_KEY')
-
-              const aiResponse = await fetch(`${azureEndpoint}/openai/deployments/gpt-4/chat/completions?api-version=2024-08-01-preview`, {
+              // Use unified env variable names for Azure
+              const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')?.replace(/\/$/, '') || ''
+              const azureKey = Deno.env.get('AZURE_OPENAI_API_KEY') || ''
+              const deploymentName = Deno.env.get('AZURE_OPENAI_DEPLOYMENT') || 'gpt-4'
+              const aiUrl = `${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-08-01-preview`
+              
+              const aiResponse = await fetch(aiUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'api-key': azureKey || '',
+                  'api-key': azureKey
                 },
                 body: JSON.stringify({
                   messages: [
-                    { role: 'system', content: 'You are a professional application letter writer for Norwegian job market.' },
-                    { role: 'user', content: applicationPrompt }
+                    {
+                      role: 'system',
+                      content: 'You are a professional application letter writer for Norwegian job market.'
+                    },
+                    {
+                      role: 'user',
+                      content: applicationPrompt
+                    }
                   ],
                   temperature: 0.7,
                   max_tokens: 1500,
-                  response_format: { type: 'json_object' }
+                  response_format: {
+                    type: 'json_object'
+                  }
                 })
               })
 
+              // Improved error handling and logging: reveal Azure error body if any
               if (!aiResponse.ok) {
                 const errorText = await aiResponse.text()
+                console.error('Azure OpenAI error (write_app):', aiResponse.status, errorText)
+                await sendTelegramMessage(
+                  chatId, 
+                  `❌ <b>Помилка сервісу AI</b>\n\nСтатус: ${aiResponse.status}\n${errorText.substring(0, 1000)}`
+                )
                 throw new Error(`Azure OpenAI error: ${aiResponse.status} - ${errorText}`)
               }
 
               const aiData = await aiResponse.json()
-
-              if (!aiData.choices || !aiData.choices[0]?.message?.content) {
+              
+              // aiData.choices[0].message.content може бути рядком JSON або об'єктом
+              if (!aiData.choices || !aiData.choices[0]?.message) {
+                console.error('Invalid AI response structure', aiData)
                 throw new Error('Invalid AI response format')
               }
 
-              const applicationText = aiData.choices[0].message.content
-              const parsedApp = JSON.parse(applicationText)
+              let applicationText = aiData.choices[0].message.content
+              let parsedApp
+              
+              try {
+                // якщо рядок — парсимо, якщо об'єкт — використовуємо напряму
+                parsedApp = typeof applicationText === 'string' 
+                  ? JSON.parse(applicationText) 
+                  : applicationText
+              } catch (e) {
+                console.error('Failed to parse AI output as JSON:', applicationText, e)
+                throw new Error('AI returned invalid JSON')
+              }
 
               // Save application to database
               const { data: savedApp, error: saveError } = await supabase
@@ -707,7 +749,7 @@ ${resume?.content || 'Резюме не завантажено'}
               previewText += `📋 <b>Вакансія:</b> ${job.title}\n`
               previewText += `🏢 <b>Компанія:</b> ${job.company}\n\n`
               previewText += `━━━━━━━━━━━━━━━━━━\n`
-              previewText += `🇳�u200c🇴 <b>Søknad (Norsk):</b>\n\n`
+              previewText += `🇳🇴 <b>Søknad (Norsk):</b>\n\n`
               previewText += `${parsedApp.soknad_no}\n\n`
               previewText += `━━━━━━━━━━━━━━━━━━\n`
               previewText += `🇺🇦 <b>Переклад (Українська):</b>\n\n`
@@ -971,9 +1013,10 @@ ${resume?.content || 'Резюме не завантажено'}
         try {
           // Translate edited Norwegian text to Ukrainian using AI
           const azureEndpoint = Deno.env.get('AZURE_OPENAI_ENDPOINT')
-          const azureKey = Deno.env.get('AZURE_OPENAI_KEY')
+          const azureKey = Deno.env.get('AZURE_OPENAI_API_KEY')
+          const deploymentName = Deno.env.get('AZURE_OPENAI_DEPLOYMENT') || 'gpt-4'
 
-          const translationResponse = await fetch(`${azureEndpoint}/openai/deployments/gpt-4/chat/completions?api-version=2024-08-01-preview`, {
+          const translationResponse = await fetch(`${azureEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-08-01-preview`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
