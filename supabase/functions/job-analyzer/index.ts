@@ -12,7 +12,16 @@ const PLACEHOLDER_RECOMMENDATIONS = [
   'analysis error',
   'no active profile',
   'no active profile for analysis',
+  'pending',
+  'pending...',
+  'analysis pending',
+  'results pending',
+  'waiting for analysis',
+  'n/a',
+  'not available',
 ]
+
+const MIN_MEANINGFUL_MANUAL_LENGTH = 35
 
 interface JobListing {
   id: string
@@ -33,7 +42,14 @@ function hasMeaningfulRecommendation(recommendation?: string) {
     return false
   }
   const lower = trimmed.toLowerCase()
-  return !PLACEHOLDER_RECOMMENDATIONS.some((phrase) => lower.includes(phrase))
+  if (PLACEHOLDER_RECOMMENDATIONS.some((phrase) => lower.includes(phrase))) {
+    return false
+  }
+  const wordCount = trimmed.split(/\s+/).length
+  if (trimmed.length < MIN_MEANINGFUL_MANUAL_LENGTH && wordCount < 5) {
+    return false
+  }
+  return true
 }
 
 /**
