@@ -15,9 +15,9 @@ def clean_json_response(response: str) -> str:
 def analyze_job_relevance(job_title: str, job_description: str, user_skills: str) -> dict:
     """Analyze if job is relevant for the user."""
     client = AzureOpenAI(
-        azure_endpoint="https://elvarika.openai.azure.com",
+        azure_endpoint=os.getenv("OPENAI_ENDPOINT", "https://jobbot.openai.azure.com"),
         api_key=os.getenv("OPENAI_KEY"),
-        api_version="2024-12-01-preview"
+        api_version=os.getenv("OPENAI_API_VERSION", "2024-12-01-preview")
     )
     
     prompt = f"""
@@ -36,6 +36,7 @@ def analyze_job_relevance(job_title: str, job_description: str, user_skills: str
     """
     
     try:
+        print(f"Calling Azure OpenAI at {os.getenv('OPENAI_ENDPOINT')} using deployment={os.getenv('AZURE_OPENAI_DEPLOYMENT_CHAT')} prompt_len={len(job_description)}")
         response = client.chat.completions.create(
             model=os.getenv("AZURE_OPENAI_DEPLOYMENT_CHAT", "gpt-4"),
             messages=[{"role": "user", "content": prompt}],
@@ -70,11 +71,10 @@ def get_azure_client():
     """Get Azure OpenAI client."""
     from openai import AzureOpenAI
     import os
-    
     return AzureOpenAI(
-        azure_endpoint="https://elvarika.openai.azure.com",
+        azure_endpoint=os.getenv("OPENAI_ENDPOINT", "https://jobbot.openai.azure.com"),
         api_key=os.getenv("OPENAI_KEY"),
-        api_version="2024-12-01-preview"
+        api_version=os.getenv("OPENAI_API_VERSION", "2024-12-01-preview")
     )
 
 # Command line interface for n8n  
