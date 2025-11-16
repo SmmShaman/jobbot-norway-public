@@ -733,6 +733,8 @@ ${profileText}
                   user_id: userSettings.user_id,
                   cover_letter_no: parsedApp.soknad_no,
                   cover_letter_uk: parsedApp.translation_uk,
+                  generated_prompt: applicationPrompt,
+                  prompt_source: 'telegram',
                   status: 'draft',
                   created_at: new Date().toISOString()
                 })

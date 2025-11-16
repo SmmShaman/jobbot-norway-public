@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS applications (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   cover_letter_no TEXT NOT NULL,  -- Norwegian søknad
   cover_letter_uk TEXT NOT NULL,  -- Ukrainian translation
+  generated_prompt TEXT,  -- Prompt text that generated this application
+  prompt_source TEXT,  -- Telegram, Dashboard, Manual edit
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'rejected', 'submitted')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
