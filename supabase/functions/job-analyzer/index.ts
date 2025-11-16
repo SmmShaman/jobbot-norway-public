@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const PLACEHOLDER_RECOMMENDATIONS = [
+  'no summary available',
+  'analysis failed',
+  'analysis error',
+  'no active profile',
+  'no active profile for analysis',
+]
+
 interface JobListing {
   id: string
   title: string
@@ -14,6 +22,18 @@ interface JobListing {
   url: string
   description?: string
   source: string
+}
+
+function hasMeaningfulRecommendation(recommendation?: string) {
+  if (!recommendation) {
+    return false
+  }
+  const trimmed = recommendation.trim()
+  if (!trimmed) {
+    return false
+  }
+  const lower = trimmed.toLowerCase()
+  return !PLACEHOLDER_RECOMMENDATIONS.some((phrase) => lower.includes(phrase))
 }
 
 /**
@@ -198,8 +218,13 @@ serve(async (req) => {
           continue
         }
 
-        // Skip if already analyzed (has relevance_score and ai_recommendation)
-        if (job.relevance_score !== null && job.relevance_score !== undefined && job.ai_recommendation) {
+        const hasValidRecommendation = hasMeaningfulRecommendation(job.ai_recommendation)
+        // Skip if already analyzed (has relevance_score and ai_recommendation that looks real)
+        if (
+          job.relevance_score !== null &&
+          job.relevance_score !== undefined &&
+          hasValidRecommendation
+        ) {
           console.log(`⏭️ Job already analyzed (score: ${job.relevance_score}), skipping:`, job.title)
           results.jobsSkipped++
           results.jobs.push({
@@ -210,6 +235,10 @@ serve(async (req) => {
             skipped: true,
           })
           continue
+        }
+
+        if (!hasValidRecommendation) {
+          console.log(`🔄 Reanalyzing job because previous result looked like a placeholder:`, job.title)
         }
 
         // Analyze relevance
