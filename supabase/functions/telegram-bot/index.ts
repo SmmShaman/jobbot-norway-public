@@ -2,8 +2,8 @@
  * Telegram Bot Webhook Handler
  * Handles all Telegram bot interactions
  */
-import serve from "https://deno.land/std@0.168.0/http/server.ts";
-import createClient from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,6 +48,16 @@ interface TelegramUpdate {
   channel_post?: any
   edited_channel_post?: any
   callback_query?: any
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === 'string') {
+    return error
+  }
+  return 'Unknown error'
 }
 
 /**
@@ -374,7 +384,10 @@ async function runFullPipeline(
         `Не вдалося знайти вакансії за посиланням.\n` +
         `Перевір URL або спробуй пізніше.`
       )
-      return
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
     const jobUrls = scanData.jobs.map((j: any) => j.url)
@@ -418,7 +431,10 @@ async function runFullPipeline(
         `Вакансії знайдені, але не вдалося витягнути деталі.\n` +
         `Спробуй ще раз або перевір Dashboard.`
       )
-      return
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
     await sendTelegramMessage(
@@ -444,7 +460,10 @@ async function runFullPipeline(
         `Дані витягнуті, але щось пішло не так при збереженні.\n` +
         `Перевір Dashboard: https://jobbot-norway.netlify.app`
       )
-      return
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
     // STEP 3: Analyze jobs ONE BY ONE and send progressive updates
@@ -534,10 +553,11 @@ async function runFullPipeline(
 
   } catch (error) {
     console.error('Pipeline error:', error)
+    const message = getErrorMessage(error)
     await sendTelegramMessage(
       chatId,
       `❌ <b>Помилка виконання</b>\n\n` +
-      `Щось пішло не так: ${error.message}\n\n` +
+      `Щось пішло не так: ${message}\n\n` +
       `Спробуй ще раз або перевір Dashboard.`
     )
   }
@@ -547,7 +567,7 @@ async function runFullPipeline(
 let requestCount = 0
 
 // Main webhook handler
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -806,7 +826,8 @@ ${profileText}
 
             } catch (error) {
               console.error('Application generation error:', error)
-              await sendTelegramMessage(chatId, `❌ <b>Помилка генерації заявки</b>\n\n${error.message}`)
+              const message = getErrorMessage(error)
+              await sendTelegramMessage(chatId, `❌ <b>Помилка генерації заявки</b>\n\n${message}`)
             }
           }
           break
@@ -1158,7 +1179,8 @@ ${profileText}
           }
         } catch (error) {
           console.error('Edit processing error:', error)
-          await sendTelegramMessage(chatId, `❌ Помилка обробки: ${error.message}`)
+          const message = getErrorMessage(error)
+          await sendTelegramMessage(chatId, `❌ Помилка обробки: ${message}`)
         }
 
         // Reset state
@@ -1235,7 +1257,10 @@ ${profileText}
             `https://jobbot-norway.netlify.app\n\n` +
             `Settings → Telegram → вкажи Chat ID: <code>${chatId}</code>`
           )
-          return
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          })
         }
 
         const userId = settings.user_id
@@ -1307,7 +1332,10 @@ ${profileText}
             }
           }
         }
-        return // Important: prevent further processing
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
       }
 
       // 6. CRITICAL: Check if user sent a direct FINN.no URL (strict validation)
@@ -1382,8 +1410,9 @@ ${profileText}
 
   } catch (error) {
     console.error('Error:', error)
+    const message = getErrorMessage(error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
