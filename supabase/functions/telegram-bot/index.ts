@@ -1,4 +1,4 @@
-/**
+'/**
  * Telegram Bot Webhook Handler
  * Handles all Telegram bot interactions with inline keyboards
  */
@@ -192,6 +192,43 @@ function formatApplicationPreview(job: any, application: any) {
   return {
     text,
     reply_markup: { inline_keyboard: inlineKeyboard }
+  }
+}
+
+function balanceJsonBraces(text: string) {
+  const trimmed = text.trim()
+  const openCount = (trimmed.match(/{/g) || []).length
+  const closeCount = (trimmed.match(/}/g) || []).length
+  const missingClosing = Math.max(0, openCount - closeCount)
+  if (missingClosing === 0) {
+    return trimmed
+  }
+  return trimmed + '}'.repeat(missingClosing)
+}
+
+function parseApplicationResponse(content: string | object) {
+  if (typeof content !== 'string') {
+    return content
+  }
+
+  const trimmed = content.trim()
+
+  try {
+    return JSON.parse(trimmed)
+  } catch (initialError) {
+    const balanced = balanceJsonBraces(trimmed)
+
+    if (balanced === trimmed) {
+      throw initialError
+    }
+
+    try {
+      console.warn('Balanced JSON braces before parsing AI response')
+      return JSON.parse(balanced)
+    } catch (secondError) {
+      console.error('Failed to parse sanitized AI output', { trimmed, balanced })
+      throw initialError
+    }
   }
 }
 
@@ -716,10 +753,7 @@ ${profileText}
               let parsedApp
               
               try {
-                // якщо рядок — парсимо, якщо об'єкт — використовуємо напряму
-                parsedApp = typeof applicationText === 'string' 
-                  ? JSON.parse(applicationText) 
-                  : applicationText
+                parsedApp = parseApplicationResponse(applicationText)
               } catch (e) {
                 console.error('Failed to parse AI output as JSON:', applicationText, e)
                 throw new Error('AI returned invalid JSON')

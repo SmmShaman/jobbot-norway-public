@@ -11,8 +11,12 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS posted_date TEXT;
 -- Add scraped_at if it doesn't exist (different from discovered_at)
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scraped_at TIMESTAMPTZ;
 
+-- Ensure discovered_at exists before using it
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS discovered_at TIMESTAMPTZ;
 -- Set scraped_at to discovered_at for existing rows
-UPDATE jobs SET scraped_at = discovered_at WHERE scraped_at IS NULL;
+UPDATE jobs
+SET scraped_at = discovered_at
+WHERE scraped_at IS NULL;
 
 -- Add index on scraped_at if it doesn't exist
 CREATE INDEX IF NOT EXISTS idx_jobs_scraped_at ON jobs(scraped_at DESC);

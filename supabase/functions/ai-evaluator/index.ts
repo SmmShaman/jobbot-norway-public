@@ -20,6 +20,8 @@ interface RelevanceResult {
   recommendation: 'APPLY' | 'REVIEW' | 'SKIP'
 }
 
+// Confirmed edit ability by adding this comment
+
 async function analyzeJobRelevance(
   job: any,
   profile: any
