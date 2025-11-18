@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats } from '@/hooks/useDashboard';
 import { useScanJobs, useJobs } from '@/hooks/useJobs';
 import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 // Helper function to determine job status based on data
 function getJobStatus(job: any): { label: string; color: string } {
@@ -35,16 +35,60 @@ function getJobStatus(job: any): { label: string; color: string } {
   return { label: 'New', color: 'bg-gray-100 text-gray-800' };
 }
 
+const STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'Complete', label: 'Complete' },
+  { value: 'Sended', label: 'Sended' },
+  { value: 'Søknad', label: 'Søknad' },
+  { value: 'Analyzed', label: 'Analyzed' },
+  { value: 'Full', label: 'Full' },
+  { value: 'New', label: 'New' },
+];
+
+type JobFilterField = 'title' | 'company' | 'location' | 'status';
+type FilterState = Record<JobFilterField, string>;
+
+const matchesFilterText = (value: string | null | undefined, filter: string) => {
+  if (!filter) return true;
+  return String(value || '').toLowerCase().includes(filter.toLowerCase());
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useDashboardStats(user?.id || '');
   const { data: jobs, isLoading: jobsLoading } = useJobs(user?.id || '');
   const scanJobs = useScanJobs();
-
+ 
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>({
+    title: '',
+    company: '',
+    location: '',
+    status: '',
+  });
+ 
+  const filteredJobs = useMemo(() => {
+    const list = jobs || [];
+    return list.filter((job: any) => {
+      const statusLabel = getJobStatus(job).label;
+      return (
+        matchesFilterText(job.title, filters.title) &&
+        matchesFilterText(job.company, filters.company) &&
+        matchesFilterText(job.location, filters.location) &&
+        (filters.status ? statusLabel === filters.status : true)
+      );
+    });
+  }, [jobs, filters]);
+ 
+  const handleFilterChange = (field: JobFilterField, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
 
   const handleScanNow = () => {
     if (user) {
@@ -56,16 +100,16 @@ export default function Dashboard() {
   };
 
   const handleSelectJob = (jobId: string) => {
-    setSelectedJobs(prev =>
-      prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId]
+    setSelectedJobs((prev: string[]) =>
+      prev.includes(jobId) ? prev.filter((id: string) => id !== jobId) : [...prev, jobId]
     );
   };
-
+ 
   const handleSelectAll = () => {
-    if (selectedJobs.length === jobs?.length) {
+    if (selectedJobs.length === filteredJobs.length && filteredJobs.length > 0) {
       setSelectedJobs([]);
     } else {
-      setSelectedJobs(jobs?.map((j: any) => j.id) || []);
+      setSelectedJobs(filteredJobs.map((j: any) => j.id));
     }
   };
 
@@ -245,53 +289,98 @@ export default function Dashboard() {
 
       {/* Scraped Jobs Table */}
       <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Scraped Jobs</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {jobs?.length || 0} jobs found • {selectedJobs.length} selected
-            </p>
-          </div>
-          {selectedJobs.length > 0 && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleExtractDetails}
-                disabled={isExtracting || isAnalyzing}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isExtracting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Extracting...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    Extract Details ({selectedJobs.length})
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleAnalyzeRelevance}
-                disabled={isAnalyzing || isExtracting}
-                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Analyze Relevance ({selectedJobs.length})
-                  </>
-                )}
-              </button>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Scraped Jobs</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Showing {filteredJobs.length} of {jobs?.length || 0} jobs • {selectedJobs.length} selected
+              </p>
             </div>
-          )}
+            {selectedJobs.length > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExtractDetails}
+                  disabled={isExtracting || isAnalyzing}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isExtracting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Extracting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Extract Details ({selectedJobs.length})
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleAnalyzeRelevance}
+                  disabled={isAnalyzing || isExtracting}
+                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Analyze Relevance ({selectedJobs.length})
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Title</span>
+              <input
+                value={filters.title}
+                onChange={(event) => handleFilterChange('title', event.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+                placeholder="Filter by title"
+              />
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Company</span>
+              <input
+                value={filters.company}
+                onChange={(event) => handleFilterChange('company', event.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+                placeholder="Filter by company"
+              />
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Location</span>
+              <input
+                value={filters.location}
+                onChange={(event) => handleFilterChange('location', event.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+                placeholder="Filter by location"
+              />
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Status</span>
+              <select
+                value={filters.status}
+                onChange={(event) => handleFilterChange('status', event.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
-
+ 
         <div className="overflow-x-auto">
           {jobsLoading ? (
             <div className="p-8 text-center text-gray-500">
@@ -303,6 +392,10 @@ export default function Dashboard() {
               <Briefcase className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No jobs found yet. Add FINN.no URLs in Settings and click "Scrape Jobs Now"</p>
             </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <p>No jobs match the current filters</p>
+            </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -310,7 +403,7 @@ export default function Dashboard() {
                   <th className="px-6 py-3 text-left w-12">
                     <input
                       type="checkbox"
-                      checked={selectedJobs.length === (jobs?.length || 0)}
+                      checked={selectedJobs.length === filteredJobs.length && filteredJobs.length > 0}
                       onChange={handleSelectAll}
                       className="rounded border-gray-300"
                     />
@@ -346,7 +439,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {(jobs || []).map((job: any) => (
+                {filteredJobs.map((job: any) => (
                   <>
                     <tr
                       key={job.id}
