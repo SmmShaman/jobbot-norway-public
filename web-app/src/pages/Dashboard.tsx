@@ -504,24 +504,22 @@ export default function Dashboard() {
                 {filteredJobs.map((job: any) => {
                   const addedTimestamp = getJobAddedTimestamp(job);
                   return (
-                    <>
+                    <Fragment key={job.id}>
                       <tr
-                        key={job.id}
                         className={`${selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'} cursor-pointer`}
                         onClick={(e) => {
-                          // Don't expand if clicking on checkbox or links
                           if ((e.target as HTMLElement).closest('input, a')) return;
                           toggleExpandJob(job.id);
                         }}
                       >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={selectedJobs.includes(job.id)}
-                          onChange={() => handleSelectJob(job.id)}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedJobs.includes(job.id)}
+                            onChange={() => handleSelectJob(job.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={(e) => {
@@ -666,8 +664,9 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     )}
-                  </>
-                ))}
+                  </Fragment>
+                );
+              })}
               </tbody>
             </table>
           )}
