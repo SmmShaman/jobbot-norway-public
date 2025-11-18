@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useDashboardStats } from '@/hooks/useDashboard';
 import { useScanJobs, useJobs } from '@/hooks/useJobs';
 import { Briefcase, CheckCircle, FileText, PlayCircle, ExternalLink, Download, ChevronDown, ChevronRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 
 // Helper function to determine job status based on data
 function getJobStatus(job: any): { label: string; color: string } {
@@ -45,12 +45,43 @@ const STATUS_OPTIONS = [
   { value: 'New', label: 'New' },
 ];
 
-type JobFilterField = 'title' | 'company' | 'location' | 'status';
+const DATE_INTERVAL_OPTIONS = [
+  { value: '', label: 'Any time range' },
+  { value: '2', label: 'Last 2 days' },
+  { value: '5', label: 'Last 5 days' },
+  { value: '7', label: 'Last 7 days' },
+  { value: '14', label: 'Last 14 days' },
+];
+
+type JobFilterField = 'title' | 'company' | 'location' | 'status' | 'addedDate' | 'addedInterval';
 type FilterState = Record<JobFilterField, string>;
 
 const matchesFilterText = (value: string | null | undefined, filter: string) => {
   if (!filter) return true;
   return String(value || '').toLowerCase().includes(filter.toLowerCase());
+};
+
+const getJobAddedTimestamp = (job: any): number | null => {
+  const dateString = job.discovered_at || job.scraped_at;
+  if (!dateString) return null;
+  const parsed = Date.parse(dateString);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const matchesAddedDate = (timestamp: number | null, filterDate: string) => {
+  if (!filterDate) return true;
+  if (!timestamp) return false;
+  const jobDate = new Date(timestamp).toISOString().split('T')[0];
+  return jobDate === filterDate;
+};
+
+const matchesAddedInterval = (timestamp: number | null, intervalValue: string) => {
+  if (!intervalValue) return true;
+  if (!timestamp) return false;
+  const days = Number(intervalValue);
+  if (Number.isNaN(days) || days <= 0) return true;
+  const diffMs = Date.now() - timestamp;
+  return diffMs <= days * 24 * 60 * 60 * 1000;
 };
 
 export default function Dashboard() {
@@ -68,23 +99,28 @@ export default function Dashboard() {
     company: '',
     location: '',
     status: '',
+    addedDate: '',
+    addedInterval: '',
   });
  
   const filteredJobs = useMemo(() => {
     const list = jobs || [];
     return list.filter((job: any) => {
       const statusLabel = getJobStatus(job).label;
+      const addedTimestamp = getJobAddedTimestamp(job);
       return (
         matchesFilterText(job.title, filters.title) &&
         matchesFilterText(job.company, filters.company) &&
         matchesFilterText(job.location, filters.location) &&
-        (filters.status ? statusLabel === filters.status : true)
+        (filters.status ? statusLabel === filters.status : true) &&
+        matchesAddedDate(addedTimestamp, filters.addedDate) &&
+        matchesAddedInterval(addedTimestamp, filters.addedInterval)
       );
     });
   }, [jobs, filters]);
  
   const handleFilterChange = (field: JobFilterField, value: string) => {
-    setFilters(prev => ({
+    setFilters((prev: FilterState) => ({
       ...prev,
       [field]: value,
     }));
@@ -336,7 +372,7 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-6">
             <label className="text-xs text-gray-500">
               <span className="text-gray-700 block mb-1">Title</span>
               <input
@@ -372,6 +408,29 @@ export default function Dashboard() {
                 className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
               >
                 {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Added date</span>
+              <input
+                type="date"
+                value={filters.addedDate}
+                onChange={(event) => handleFilterChange('addedDate', event.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+              />
+            </label>
+            <label className="text-xs text-gray-500">
+              <span className="text-gray-700 block mb-1">Interval</span>
+              <select
+                value={filters.addedInterval}
+                onChange={(event) => handleFilterChange('addedInterval', event.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary-600 focus:outline-none"
+              >
+                {DATE_INTERVAL_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -422,6 +481,9 @@ export default function Dashboard() {
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Added
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Deadline
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -439,17 +501,19 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredJobs.map((job: any) => (
-                  <>
-                    <tr
-                      key={job.id}
-                      className={`${selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'} cursor-pointer`}
-                      onClick={(e) => {
-                        // Don't expand if clicking on checkbox or links
-                        if ((e.target as HTMLElement).closest('input, a')) return;
-                        toggleExpandJob(job.id);
-                      }}
-                    >
+                {filteredJobs.map((job: any) => {
+                  const addedTimestamp = getJobAddedTimestamp(job);
+                  return (
+                    <>
+                      <tr
+                        key={job.id}
+                        className={`${selectedJobs.includes(job.id) ? 'bg-blue-50' : 'hover:bg-gray-50'} cursor-pointer`}
+                        onClick={(e) => {
+                          // Don't expand if clicking on checkbox or links
+                          if ((e.target as HTMLElement).closest('input, a')) return;
+                          toggleExpandJob(job.id);
+                        }}
+                      >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <input
                           type="checkbox"
@@ -502,6 +566,11 @@ export default function Dashboard() {
                             </div>
                           )}
                           {!job.contact_person && !job.contact_email && !job.contact_phone && '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {addedTimestamp ? new Date(addedTimestamp).toLocaleDateString('no-NO') : '-'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
