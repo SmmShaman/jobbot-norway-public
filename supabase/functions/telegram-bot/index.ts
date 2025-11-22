@@ -494,9 +494,20 @@ async function runFullPipeline(
         }),
       })
 
-      const analyzeData = await analyzeResponse.json()
+      let analyzeData: any
+      try {
+        analyzeData = await analyzeResponse.json()
+      } catch (error) {
+        console.error(`❌ Failed to parse job analyzer response for ${job.title}:`, error)
+        await sendTelegramMessage(
+          chatId,
+          `⚠️ Неможливо прочитати відповідь аналізу вакансії "${job.title}"`
+        )
+        continue
+      }
 
-      if (!analyzeData.success) {
+      if (!analyzeResponse.ok || !analyzeData?.success) {
+        console.error(`❌ Job analyzer responded with error for ${job.title}`, { status: analyzeResponse.status, body: analyzeData })
         await sendTelegramMessage(
           chatId,
           `⚠️ Помилка аналізу вакансії "${job.title}"`
